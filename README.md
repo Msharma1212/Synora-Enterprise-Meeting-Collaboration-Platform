@@ -1,15 +1,29 @@
-<div align="center">
-</div>
-
-# Run and deploy 
-
-## Run Locally
-
-**Prerequisites:**  Node.js
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Tech Stack
+
+- React.js
+- TypeScript
+- Node.js
+- Socket.IO
+- WebRTC
+- Firebase
+- MongoDB
+- Tailwind CSS
+
+## Key Highlights
+
+- Real-time multi-user video conferencing
+- Zoom-style screen sharing experience
+- Creator/Audience ecosystem
+- Referral-based community growth system
+- Secure role hierarchy and permissions
+- Modern responsive UI/UX
+
+## Installation
+
+```bash
+git clone <repo-url>
+cd z-meet
+npm install
+npm run dev
