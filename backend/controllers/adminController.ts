@@ -155,9 +155,31 @@ export const getAnalyticsStats = async (req: Request, res: Response) => {
   }
 };
 
+const getRoleLevel = (role?: string): number => {
+  switch (role?.toLowerCase()) {
+    case 'developer': return 4;
+    case 'admin':
+    case 'host':
+    case 'co-admin': return 3;
+    case 'audience': return 2;
+    case 'user': return 1;
+    default: return 1;
+  }
+};
+
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const users = await User.find({}).select('-password');
+    const requester = (req as any).user;
+    const actorRole = requester?.role || 'user';
+    const actorLevel = getRoleLevel(actorRole);
+
+    let query: any = {};
+    if (actorLevel < 4) {
+      // Developer data must be completely hidden from non-developers
+      query.role = { $ne: 'developer' };
+    }
+
+    const users = await User.find(query).select('-password');
     res.json(users);
   } catch (error: any) {
     console.error("[getAllUsers Error]:", error);
@@ -180,6 +202,19 @@ export const deleteUser = async (req: Request, res: Response) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
+    const requester = (req as any).user;
+    if (!requester) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const actorLevel = getRoleLevel(requester.role);
+    const targetLevel = getRoleLevel(user.role);
+
+    // Strict Role Hierarchy check before action execution
+    if (targetLevel >= actorLevel) {
+      return res.status(403).json({ message: 'Permission denied. Strict role hierarchy constraint violated (Target role level is higher than or equal to your level).' });
+    }
+
     // Also delete their meetings
     await Meeting.deleteMany({ host: user._id });
     await user.deleteOne();
@@ -208,17 +243,66 @@ export const updateUserRole = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     
     const requester = (req as any).user;
-    if (!requester || requester.role !== 'developer') {
-      return res.status(403).json({ message: 'Permission denied. Only developers can assign roles.' });
+    if (!requester) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const actorLevel = getRoleLevel(requester.role);
+    const targetLevel = getRoleLevel(user.role);
+
+    // Strict Role Hierarchy check before role modification is allowed
+    if (targetLevel >= actorLevel) {
+      return res.status(403).json({ message: 'Permission denied. Strict role hierarchy constraint violated (Target role level is higher than or equal to your level).' });
     }
     
     const { role } = req.body;
-    if (role !== 'admin' && role !== 'developer' && role !== 'co-admin' && role !== 'creator' && role !== 'user' && role !== 'host') {
+    if (role !== 'admin' && role !== 'developer' && role !== 'co-admin' && role !== 'audience' && role !== 'user' && role !== 'host') {
       return res.status(400).json({ message: 'Invalid role' });
     }
+
+    const newRoleLevel = getRoleLevel(role);
+    if (newRoleLevel >= actorLevel) {
+      return res.status(403).json({ message: 'Permission denied. You cannot assign a role level greater than or equal to your own level.' });
+    }
+
+    // Make Audience flow
+    if (role === 'audience') {
+      user.role = 'audience';
+      user.parentHostId = requester._id as any;
+      user.referredBy = requester._id as any;
+      user.hostReferralCode = requester.referralCode; // Auto update referral code with host's referralCode
+      await user.save();
+
+      // Create audience relationship: Add user to host (requester) audience list
+      await User.findByIdAndUpdate(requester._id, {
+        $addToSet: { audience: user._id }
+      });
+
+      // Send real-time role assignment socket notification
+      const io = req.app.get('io');
+      const userSockets = req.app.get('userSockets') || {};
+      const targetSockets = userSockets[user._id.toString()] || [];
+      targetSockets.forEach((sid: string) => {
+        io.to(sid).emit("role-assigned", {
+          role: 'audience',
+          hostId: requester._id,
+          hostName: requester.name,
+          hostReferralCode: requester.referralCode
+        });
+      });
+    } else {
+      user.role = role;
+      await user.save();
+    }
     
-    user.role = role;
-    await user.save();
+    // Refresh admin stats
+    const io = req.app.get('io');
+    if (io) {
+      const getActiveStats = req.app.get('getActiveStats');
+      if (getActiveStats) {
+        io.to("admin-console").emit("admin-stats-update", getActiveStats());
+      }
+    }
     
     res.json({ message: 'User role updated successfully', user: { _id: user._id, role: user.role } });
   } catch (error: any) {
@@ -231,6 +315,19 @@ export const banUser = async (req: Request, res: Response) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
+    const requester = (req as any).user;
+    if (!requester) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const actorLevel = getRoleLevel(requester.role);
+    const targetLevel = getRoleLevel(user.role);
+
+    // Strict Role Hierarchy check before banning user
+    if (targetLevel >= actorLevel) {
+      return res.status(403).json({ message: 'Permission denied. Strict role hierarchy constraint violated (Target role level is higher than or equal to your level).' });
+    }
+
     user.isBanned = true;
     user.bannedAt = new Date();
     await user.save();
@@ -240,7 +337,7 @@ export const banUser = async (req: Request, res: Response) => {
     const userSockets = req.app.get('userSockets') || {};
     const sids = userSockets[user._id.toString()] || [];
     sids.forEach((sid: string) => {
-      io.to(sid).emit("force-logout", { reason: 'Your account has been banned by an administrator.' });
+      io.to(sid).emit("force-logout", { reason: 'Your account has been banned.' });
     });
     
     res.json({ message: 'User banned successfully', user: { _id: user._id, isBanned: user.isBanned } });
@@ -254,6 +351,19 @@ export const unbanUser = async (req: Request, res: Response) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
+    const requester = (req as any).user;
+    if (!requester) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const actorLevel = getRoleLevel(requester.role);
+    const targetLevel = getRoleLevel(user.role);
+
+    // Strict Role Hierarchy check before unbanning user
+    if (targetLevel >= actorLevel) {
+      return res.status(403).json({ message: 'Permission denied. Strict role hierarchy constraint violated (Target role level is higher than or equal to your level).' });
+    }
+
     user.isBanned = false;
     user.bannedAt = undefined;
     await user.save();
@@ -269,6 +379,19 @@ export const forceLogoutUser = async (req: Request, res: Response) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
+    const requester = (req as any).user;
+    if (!requester) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const actorLevel = getRoleLevel(requester.role);
+    const targetLevel = getRoleLevel(user.role);
+
+    // Strict Role Hierarchy check before logging out user
+    if (targetLevel >= actorLevel) {
+      return res.status(403).json({ message: 'Permission denied. Strict role hierarchy constraint violated (Target role level is higher than or equal to your level).' });
+    }
+
     // Real-time: Force logout of the user
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets') || {};
@@ -288,6 +411,19 @@ export const getUserActivityDetail = async (req: Request, res: Response) => {
     const user = await User.findById(req.params.id).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
     
+    const requester = (req as any).user;
+    if (!requester) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const actorLevel = getRoleLevel(requester.role);
+    const targetLevel = getRoleLevel(user.role);
+
+    // Strict Role Hierarchy check before viewing activity/profile
+    if (targetLevel >= actorLevel) {
+      return res.status(403).json({ message: 'Permission denied. Strict role hierarchy constraint violated (Target role level is higher than or equal to your level).' });
+    }
+
     // Fetch past meetings hosted by user
     const meetingsHosted = await Meeting.find({ host: user._id }).sort({ createdAt: -1 });
     
@@ -350,3 +486,65 @@ export const getUserActivityDetail = async (req: Request, res: Response) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+export const updateTargetUserHost = async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    // Check developer status
+    const requester = (req as any).user;
+    if (!requester || requester.role !== 'developer') {
+      return res.status(403).json({ message: 'Only developer accounts can manually change Host ownership.' });
+    }
+    
+    const { hostId } = req.body;
+    if (!hostId) {
+      // Remove host ownership completely
+      if (user.referredBy) {
+        await User.findByIdAndUpdate(user.referredBy, {
+          $pull: { audience: user._id },
+          $inc: { audienceCount: -1 }
+        });
+      }
+      user.referredBy = undefined;
+      user.parentHostId = undefined;
+      user.hostReferralCode = undefined;
+      user.role = 'user'; // reset role
+      await user.save();
+      return res.json({ message: 'Host ownership removed successfully', user });
+    }
+    
+    const newHost = await User.findById(hostId);
+    if (!newHost) return res.status(404).json({ message: 'New Host user not found' });
+    
+    if (newHost._id.toString() === user._id.toString()) {
+      return res.status(400).json({ message: 'A user cannot be referred by themselves.' });
+    }
+    
+    // Pull from old host if any
+    if (user.referredBy) {
+      await User.findByIdAndUpdate(user.referredBy, {
+        $pull: { audience: user._id },
+        $inc: { audienceCount: -1 }
+      });
+    }
+    
+    user.referredBy = newHost._id as any;
+    user.parentHostId = newHost._id as any;
+    user.hostReferralCode = newHost.referralCode;
+    user.role = 'audience'; // ensure they are set to audience role
+    await user.save();
+    
+    // Add to new host
+    await User.findByIdAndUpdate(newHost._id, {
+      $addToSet: { audience: user._id },
+      $inc: { audienceCount: 1 }
+    });
+    
+    res.json({ message: 'Host ownership updated successfully', user });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+

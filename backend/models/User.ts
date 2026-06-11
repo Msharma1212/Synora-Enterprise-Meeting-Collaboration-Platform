@@ -6,7 +6,7 @@ export interface IUser extends Document {
   email: string;
   password?: string;
   avatar?: string;
-  role: 'admin' | 'developer' | 'co-admin' | 'creator' | 'user' | 'host';
+  role: 'admin' | 'developer' | 'co-admin' | 'audience' | 'user' | 'host';
   isBanned?: boolean;
   bannedAt?: Date;
   lastActiveAt?: Date;
@@ -16,9 +16,14 @@ export interface IUser extends Document {
     timestamp: Date;
   }[];
   audience?: string[];
-  creatorId?: string;
+  audienceId?: string;
+  parentHostId?: mongoose.Types.ObjectId;
   referralCode?: string;
+  hostReferralCode?: string;
   referredBy?: mongoose.Types.ObjectId;
+  invitedBy?: mongoose.Types.ObjectId;
+  audienceCount?: number;
+  notificationToken?: string;
   settings: {
     language: string;
     notifications: {
@@ -35,7 +40,7 @@ const UserSchema: Schema = new Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   avatar: { type: String, default: '' },
-  role: { type: String, enum: ['admin', 'developer', 'co-admin', 'creator', 'user', 'host'], default: 'user' },
+  role: { type: String, enum: ['admin', 'developer', 'co-admin', 'audience', 'user', 'host'], default: 'user' },
   isBanned: { type: Boolean, default: false },
   bannedAt: { type: Date },
   lastActiveAt: { type: Date, default: Date.now },
@@ -45,9 +50,14 @@ const UserSchema: Schema = new Schema({
     timestamp: { type: Date, default: Date.now }
   }],
   audience: [{ type: Schema.Types.ObjectId, ref: 'User' }],
-  creatorId: { type: Schema.Types.ObjectId, ref: 'User' },
+  audienceId: { type: Schema.Types.ObjectId, ref: 'User' },
+  parentHostId: { type: Schema.Types.ObjectId, ref: 'User' },
   referralCode: { type: String, unique: true, sparse: true },
+  hostReferralCode: { type: String },
   referredBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  invitedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  audienceCount: { type: Number, default: 0 },
+  notificationToken: { type: String, default: "" },
   settings: {
     language: { type: String, default: 'English (US)' },
     notifications: {
@@ -59,10 +69,15 @@ const UserSchema: Schema = new Schema({
 }, { timestamps: true });
 
 UserSchema.pre('save', async function(this: any) {
-  if (!this.referralCode) {
-    const base = (this.name || 'USER').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
-    const random = Math.floor(1000 + Math.random() * 9000);
-    this.referralCode = `${base}${random}`;
+  const hostRoles = ['admin', 'developer', 'co-admin', 'host'];
+  if (hostRoles.includes(this.role)) {
+    if (!this.referralCode) {
+      const base = (this.name || 'USER').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+      const random = Math.floor(1000 + Math.random() * 9000);
+      this.referralCode = `${base}${random}`;
+    }
+  } else {
+    this.referralCode = undefined;
   }
 
   if (!this.isModified('password')) return;

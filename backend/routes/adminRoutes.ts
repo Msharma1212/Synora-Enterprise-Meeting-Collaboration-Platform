@@ -11,7 +11,8 @@ import {
   banUser,
   unbanUser,
   forceLogoutUser,
-  getUserActivityDetail
+  getUserActivityDetail,
+  updateTargetUserHost
 } from '../controllers/adminController';
 import User from '../models/User';
 import jwt from 'jsonwebtoken';
@@ -52,13 +53,14 @@ const strictAdminOnly = (req: any, res: any, next: any) => {
 
 router.get('/users', adminMiddleware, getAllUsers);
 router.get('/meetings', adminMiddleware, getAllMeetings);
-router.delete('/users/:id', adminMiddleware, strictAdminOnly, deleteUser);
-router.delete('/meetings/:id', adminMiddleware, strictAdminOnly, deleteMeeting);
+router.delete('/users/:id', adminMiddleware, deleteUser);
+router.delete('/meetings/:id', adminMiddleware, deleteMeeting);
 
-router.put('/users/:id/role', adminMiddleware, strictAdminOnly, updateUserRole);
-router.post('/users/:id/ban', adminMiddleware, strictAdminOnly, banUser);
-router.post('/users/:id/unban', adminMiddleware, strictAdminOnly, unbanUser);
-router.post('/users/:id/logout', adminMiddleware, strictAdminOnly, forceLogoutUser);
+router.put('/users/:id/role', adminMiddleware, updateUserRole);
+router.put('/users/:id/host', adminMiddleware, strictAdminOnly, updateTargetUserHost);
+router.post('/users/:id/ban', adminMiddleware, banUser);
+router.post('/users/:id/unban', adminMiddleware, unbanUser);
+router.post('/users/:id/logout', adminMiddleware, forceLogoutUser);
 router.get('/users/:id/activity', adminMiddleware, getUserActivityDetail);
 
 router.get('/global-settings', adminMiddleware, getGlobalSettings);

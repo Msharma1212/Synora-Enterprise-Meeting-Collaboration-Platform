@@ -27,7 +27,7 @@ export const createMeeting = async (req: any, res: Response) => {
       title: title || 'New Meeting',
       code,
       host: req.user._id,
-      creatorId: req.user._id,
+      audienceId: req.user._id,
       isBroadcast: !!isBroadcast,
       enableWaitingRoom: !!enableWaitingRoom,
       participants: [req.user._id],
@@ -53,6 +53,34 @@ export const createMeeting = async (req: any, res: Response) => {
       });
     }
 
+    // Trigger meeting-started live notifications for host's audience
+    try {
+      const io = req.app.get('io');
+      const userSockets = req.app.get('userSockets') || {};
+      const hostDoc = await User.findById(req.user._id);
+      
+      if (hostDoc && hostDoc.audience && hostDoc.audience.length > 0) {
+        hostDoc.audience.forEach((memberId: any) => {
+          const memberSockets = userSockets[memberId.toString()];
+          if (memberSockets && memberSockets.length > 0) {
+            memberSockets.forEach((sid: string) => {
+              if (io) {
+                io.to(sid).emit("meeting-started", {
+                  hostName: req.user.name,
+                  hostId: req.user._id.toString(),
+                  meetingTitle: meeting.title,
+                  meetingCode: meeting.code,
+                  isBroadcast: meeting.isBroadcast
+                });
+              }
+            });
+          }
+        });
+      }
+    } catch (socketErr) {
+      console.error("Failed to dispatch meeting-started socket alert:", socketErr);
+    }
+
     res.status(201).json(meeting);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -68,7 +96,7 @@ export const scheduleMeeting = async (req: any, res: Response) => {
       title: title || 'Scheduled Meeting',
       code,
       host: req.user._id,
-      creatorId: req.user._id,
+      audienceId: req.user._id,
       startTime: startTime || new Date().toISOString(),
       isLive: false, // Scheduled meetings are not live yet
       isBroadcast: !!isBroadcast,
@@ -254,7 +282,7 @@ export const deleteMeeting = async (req: any, res: Response) => {
     
     // Authorization check - only host (creator) or admin/developer/co-admin can delete
     const isMeetingHost = meeting.host.toString() === req.user._id.toString() || 
-                          (meeting.creatorId && meeting.creatorId.toString() === req.user._id.toString());
+                          (meeting.audienceId && meeting.audienceId.toString() === req.user._id.toString());
     const isAdmin = req.user.role === 'admin' || req.user.role === 'developer' || req.user.role === 'co-admin';
 
     if (!isMeetingHost && !isAdmin) {
@@ -485,6 +513,7 @@ export const getHostMeetings = async (req: any, res: Response) => {
     const meetings = await Meeting.find({ host: user.referredBy }).sort({ createdAt: -1 }).populate('host', 'name email');
     res.json({
       hostName: hostUser ? hostUser.name : 'Your Host',
+      hostReferralCode: hostUser ? hostUser.referralCode : undefined,
       meetings: meetings
     });
   } catch (error: any) {
@@ -503,14 +532,14 @@ export const getLiveBroadcasts = async (req: any, res: Response) => {
     } else if (user.role === 'host') {
       // Hosts see ONLY their own broadcasts
       query.$or = [
-        { creatorId: user._id },
+        { audienceId: user._id },
         { host: user._id }
       ];
     } else {
       // Regular user sees broadcasts only if created by their referredBy host
       if (user.referredBy) {
         query.$or = [
-          { creatorId: user.referredBy },
+          { audienceId: user.referredBy },
           { host: user.referredBy }
         ];
       } else {
@@ -527,4 +556,67 @@ export const getLiveBroadcasts = async (req: any, res: Response) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+export const sendMeetingReminder = async (req: any, res: Response) => {
+  if (!checkDbConnection(res)) return;
+  const { meetingCode, timeTier, customMinutes, announcementText } = req.body;
+  try {
+    const hostId = req.user._id;
+    const hostName = req.user.name || 'Your Host';
+    const io = req.app.get('io');
+    const userSockets = req.app.get('userSockets') || {};
+
+    const hostDoc = await User.findById(hostId);
+    if (!hostDoc) return res.status(404).json({ message: 'Host not found' });
+
+    let messageText = '';
+    if (announcementText) {
+      messageText = announcementText;
+    } else {
+      let timeStr = '';
+      if (timeTier === 'Live Now') {
+        timeStr = 'now';
+      } else if (timeTier === '10 Minutes') {
+        timeStr = 'in 10 minutes';
+      } else if (timeTier === '30 Minutes') {
+        timeStr = 'in 30 minutes';
+      } else if (timeTier === '1 Hour') {
+        timeStr = 'in 1 hour';
+      } else if (timeTier === 'Custom Time') {
+        timeStr = `in ${customMinutes || 15} minutes`;
+      } else {
+        timeStr = 'soon';
+      }
+      messageText = `${hostName} will go live ${timeStr}!`;
+    }
+
+    const payload = {
+      hostId: hostId.toString(),
+      hostName,
+      meetingCode,
+      message: messageText,
+      timeTier,
+      timestamp: new Date()
+    };
+
+    // Find audience members of this host
+    if (hostDoc.audience && hostDoc.audience.length > 0) {
+      hostDoc.audience.forEach((memberId: any) => {
+        const memberSockets = userSockets[memberId.toString()];
+        if (memberSockets && memberSockets.length > 0) {
+          memberSockets.forEach((sid: string) => {
+            if (io) {
+              io.to(sid).emit("audience-reminder", payload);
+            }
+          });
+        }
+      });
+    }
+
+    res.json({ message: 'Announcement and reminders sent successfully!', messageText });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 

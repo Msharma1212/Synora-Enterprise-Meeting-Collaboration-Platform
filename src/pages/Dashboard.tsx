@@ -24,13 +24,26 @@ import {
   Unlock,
   Eye,
   EyeOff,
-  Gift
+  Gift,
+  Sparkles,
+  Copy,
+  Share2,
+  Award,
+  Activity,
+  TrendingUp,
+  Flame,
+  Crown,
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import toast from 'react-hot-toast';
 import { Meeting } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
 import io from 'socket.io-client';
+import { 
+  AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, 
+  CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell 
+} from 'recharts';
 
 export const Dashboard = () => {
   const { user } = useAuth();
@@ -44,8 +57,18 @@ export const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Referral states
-  const [hostMeetingsData, setHostMeetingsData] = useState<{ hostName: string | null; meetings: Meeting[] }>({ hostName: null, meetings: [] });
-  const [audienceData, setAudienceData] = useState<{ count: number; users: any[] }>({ count: 0, users: [] });
+  const [hostMeetingsData, setHostMeetingsData] = useState<{ hostName: string | null; hostReferralCode?: string; meetings: Meeting[] }>({ hostName: null, meetings: [] });
+  const [audienceData, setAudienceData] = useState<{ count: number; users: any[]; helpers?: any[] }>({ count: 0, users: [], helpers: [] });
+  const [activeChartTab, setActiveChartTab] = useState<'all' | 'growth' | 'attendance' | 'active' | 'invite'>('all');
+
+  const getRewardBadge = (count: number) => {
+    if (count >= 100) return { icon: '👑', label: 'Community Legend', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
+    if (count >= 50) return { icon: '🥇', label: 'Community Champion', color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' };
+    if (count >= 25) return { icon: '🥈', label: 'Community Builder', color: 'text-slate-200 bg-slate-300/10 border-slate-300/30' };
+    if (count >= 5) return { icon: '🥉', label: 'Community Supporter', color: 'text-orange-400 bg-orange-500/10 border-orange-500/30' };
+    return null;
+  };
+
   const [dismissedMeetingIds, setDismissedMeetingIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('dismissed_meeting_ids');
@@ -64,6 +87,150 @@ export const Dashboard = () => {
   const [sscheduledAt, setSScheduledAt] = useState('');
   const [sEnableWaitingRoom, setSEnableWaitingRoom] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
+
+  // Broadcasting portal state variables
+  const [announcementText, setAnnouncementText] = useState('');
+  const [selectedMeetingCode, setSelectedMeetingCode] = useState('');
+  const [selectedTimeTier, setSelectedTimeTier] = useState('Live Now');
+  const [customMin, setCustomMin] = useState(15);
+  const [sendingReminder, setSendingReminder] = useState(false);
+
+  const isHostOrAdmin = user && ['admin', 'developer', 'co-admin', 'host'].includes(user.role);
+
+  const getReferralLinkToShare = () => {
+    if (isHostOrAdmin) {
+      return `${window.location.origin}/register?ref=${user?.referralCode || ''}`;
+    }
+    const hostCode = user?.hostReferralCode || hostMeetingsData.hostReferralCode || '';
+    return hostCode ? `${window.location.origin}/register?ref=${hostCode}` : window.location.origin;
+  };
+
+  // Invite Modal states
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteHostData, setInviteHostData] = useState<{
+    hostName: string | null;
+    referralCode: string | null;
+    inviteLink: string | null;
+  } | null>(null);
+
+  const openInviteModal = async () => {
+    setIsInviteModalOpen(true);
+    setInviteLoading(true);
+    setInviteHostData(null);
+    try {
+      if (isHostOrAdmin) {
+        const hostData = {
+          hostName: user?.name || 'Host',
+          referralCode: user?.referralCode || null,
+          inviteLink: user?.referralCode ? `${window.location.origin}/register?ref=${user.referralCode}` : null
+        };
+        const referralCode = hostData.referralCode;
+        const inviteLink = hostData.inviteLink;
+        
+        console.log(hostData);
+        console.log(referralCode);
+        console.log(inviteLink);
+
+        setInviteHostData(hostData);
+      } else {
+        const res = await api.get('/meetings/host-meetings');
+        const refCode = res.data?.hostReferralCode || user?.hostReferralCode || null;
+        const myReferralCode = user?.referralCode || '';
+        const hostData = {
+          hostName: res.data?.hostName || null,
+          referralCode: refCode,
+          inviteLink: refCode ? `${window.location.origin}/register?ref=${refCode}${myReferralCode ? `&helper=${myReferralCode}` : ''}` : null
+        };
+        const referralCode = hostData.referralCode;
+        const inviteLink = hostData.inviteLink;
+
+        console.log(hostData);
+        console.log(referralCode);
+        console.log(inviteLink);
+
+        setInviteHostData(hostData);
+      }
+    } catch (err) {
+      console.error('Error fetching host details for invite:', err);
+      console.log(null);
+      console.log(null);
+      console.log(null);
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const shareToWhatsapp = (link: string, name: string) => {
+    const text = `Hey! Join ${name}'s exclusive collaboration community on Z-Meet! Let's meet online.`;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + " " + link)}`;
+    window.open(url, '_blank');
+  };
+
+  const shareToTelegram = (link: string, name: string) => {
+    const text = `Hey! Join ${name}'s exclusive collaboration community on Z-Meet! Let's meet online.`;
+    const url = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const shareNative = async (link: string, name: string) => {
+    const shareData = {
+      title: `Join ${name}'s Z-Meet Workspace Community!`,
+      text: `Hey, join ${name}'s exclusive collaboration community on Z-Meet! Let's meet online.`,
+      url: link
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        toast.success('Shared successfully!');
+      } catch (err) {
+        console.log('Native share canceled or failed', err);
+      }
+    } else {
+      await navigator.clipboard.writeText(link);
+      toast.success('Invite link copied to clipboard!');
+    }
+  };
+
+  const handleSendReminderOrAnnouncement = async (type: 'announcement' | 'reminder') => {
+    setSendingReminder(true);
+    try {
+      const payload: any = {};
+      if (type === 'announcement') {
+        if (!announcementText.trim()) {
+          toast.error('Announcement text cannot be empty');
+          setSendingReminder(false);
+          return;
+        }
+        payload.announcementText = announcementText.trim();
+      } else {
+        payload.timeTier = selectedTimeTier;
+        if (selectedTimeTier === 'Custom Time') {
+          payload.customMinutes = customMin;
+        }
+        if (selectedMeetingCode) {
+          payload.meetingCode = selectedMeetingCode;
+        }
+      }
+
+      await api.post('/meetings/send-reminder', payload);
+      toast.success(type === 'announcement' ? 'Announcement dispatched to audience!' : 'Meeting reminder dispatched to audience!', {
+        icon: '📢',
+        style: {
+          background: '#07090e',
+          color: '#fb923c',
+          border: '1px solid rgba(251, 146, 60, 0.2)'
+        }
+      });
+      if (type === 'announcement') {
+        setAnnouncementText('');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to dispatch broadcast alert');
+    } finally {
+      setSendingReminder(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -302,87 +469,359 @@ export const Dashboard = () => {
         </div>
 
         {/* Referral and Host Audience Dashboard Widget */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Box 1: Your Referral Hub */}
-          <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="bg-orange-600/10 p-2.5 rounded-xl">
-                  <Gift className="w-5 h-5 text-orange-500" />
-                </div>
-                <div>
-                  <h4 className="font-black text-white text-sm uppercase tracking-wider">Your Referral Hub</h4>
-                  <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Earn influence by inviting others</p>
-                </div>
-              </div>
-              <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80 mb-3 flex items-center justify-between">
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Your Share Code</p>
-                  <p className="text-white font-mono font-black text-lg tracking-wider uppercase mt-0.5">{user?.referralCode || 'NOT_FOUND'}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(user?.referralCode || '');
-                    toast.success('Referral code copied!');
-                  }}
-                  className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
-                >
-                  Copy Code
-                </button>
-              </div>
-            </div>
-
-            {/* Display "Joined via" sponsor badge if applicable */}
-            {user?.referredBy && hostMeetingsData.hostName ? (
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mt-2 bg-purple-500/10 border border-purple-500/10 p-2.5 rounded-xl">
-                <Users className="w-4 h-4 text-purple-400" />
-                <span>Joined via: <span className="text-purple-400 font-extrabold uppercase">{hostMeetingsData.hostName}</span></span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Box 2: Host Audience Performance */}
-          <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-purple-600/10 p-2.5 rounded-xl">
-                  <Users className="w-5 h-5 text-purple-400" />
-                </div>
-                <div>
-                  <h4 className="font-black text-white text-sm uppercase tracking-wider">Your Audience</h4>
-                  <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Users who joined via your code</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="text-2xl font-black text-purple-400 font-mono block leading-none">{audienceData.count || 0}</span>
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mt-0.5">Total Users</span>
-              </div>
-            </div>
-
-            {/* Audience List */}
-            <div className="flex-1 overflow-y-auto max-h-[100px] pr-1 space-y-2 font-sans custom-scrollbar">
-              {audienceData.users && audienceData.users.length > 0 ? (
-                audienceData.users.map((audUser) => (
-                  <div key={audUser._id} className="flex items-center justify-between bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60 hover:bg-slate-950/80 transition-colors">
-                    <div>
-                      <p className="text-xs font-bold text-white leading-none">{audUser.name}</p>
-                      <p className="text-[9px] text-slate-500 font-mono mt-0.5">{audUser.email}</p>
-                    </div>
-                    <span className="text-[8px] font-black uppercase text-slate-500 bg-slate-800/45 px-1.5 py-0.5 rounded">
-                      Ref Code
-                    </span>
+        {isHostOrAdmin ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Box 1: Your Referral Hub */}
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-orange-600/10 p-2.5 rounded-xl">
+                    <Gift className="w-5 h-5 text-orange-500" />
                   </div>
-                ))
-              ) : (
-                <div className="h-full flex items-center justify-center text-center py-4 border border-dashed border-slate-800/85 rounded-xl">
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-normal">
-                    No users have registered with your code yet
-                  </p>
+                  <div>
+                    <h4 className="font-black text-white text-sm uppercase tracking-wider">Your Referral Hub</h4>
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Earn influence by inviting others to Z-Meet</p>
+                  </div>
                 </div>
-              )}
+
+                {/* Share Code row */}
+                <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Sponsor Code</p>
+                    <p className="text-orange-400 font-mono font-black text-sm tracking-wider uppercase mt-1">{user?.referralCode || 'NOT_FOUND'}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(user?.referralCode || '');
+                      toast.success('Referral code copied!');
+                    }}
+                    className="px-2.5 py-1.5 bg-orange-600/20 hover:bg-orange-600 border border-orange-500/20 text-orange-400 hover:text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all"
+                  >
+                    Copy Code
+                  </button>
+                </div>
+
+                {/* Share Invite full Link row */}
+                <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+                  <div className="overflow-hidden mr-2">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Invite Link</p>
+                    <p className="text-white hover:text-orange-400 transition-colors font-mono text-[10px] truncate mt-1">
+                      {window.location.origin}/register?ref={user?.referralCode || ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.referralCode || ''}`);
+                      toast.success('Invite link copied!');
+                    }}
+                    className="px-2.5 py-1.5 bg-orange-600/20 hover:bg-orange-600 border border-orange-500/20 text-orange-400 hover:text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shrink-0"
+                  >
+                    Copy Link
+                  </button>
+                </div>
+              </div>
+
+              {/* Global Share button */}
+              <button
+                onClick={openInviteModal}
+                className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-black uppercase tracking-widest text-xs rounded-2xl transition-all flex items-center justify-center gap-2 group shadow-xl shadow-orange-600/10 mt-2"
+              >
+                <Globe className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+                <span>Share Invite Hub</span>
+              </button>
+
+              {/* Display "Joined via" sponsor badge if applicable */}
+              {user?.referredBy && hostMeetingsData.hostName ? (
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mt-2 bg-purple-500/10 border border-purple-500/10 p-2.5 rounded-2xl">
+                  <Users className="w-4 h-4 text-purple-400" />
+                  <span>Joined via: <span className="text-purple-400 font-extrabold uppercase">{hostMeetingsData.hostName}</span></span>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Box 2: Host Audience Performance */}
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-purple-600/10 p-2.5 rounded-xl">
+                    <Users className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-white text-sm uppercase tracking-wider">Your Audience</h4>
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Users who joined via your code</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-black text-purple-400 font-mono block leading-none">{audienceData.count || 0}</span>
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mt-0.5">Total Users</span>
+                </div>
+              </div>
+
+              {/* Audience List */}
+              <div className="flex-1 overflow-y-auto max-h-[160px] pr-1 space-y-2 font-sans custom-scrollbar">
+                {audienceData.users && audienceData.users.length > 0 ? (
+                  audienceData.users.map((audUser) => (
+                    <div key={audUser._id} className="bg-slate-950/40 p-3 rounded-xl border border-slate-800/60 hover:bg-slate-950/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-white leading-none flex items-center gap-1.5">
+                          <span>{audUser.name}</span>
+                          <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded leading-none ${
+                            audUser.role?.toLowerCase() === 'audience' 
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/20' 
+                              : 'bg-slate-800/60 text-slate-400'
+                          }`}>
+                            {audUser.role || 'user'}
+                          </span>
+                        </p>
+                        <p className="text-[9px] text-slate-500 font-mono mt-1">{audUser.email}</p>
+                      </div>
+                      <div className="text-[9px] text-right font-mono space-y-0.5">
+                        <p className="text-slate-400">
+                          Joined: <span className="text-slate-300">{audUser.createdAt ? new Date(audUser.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
+                        </p>
+                        <p className="text-slate-500">
+                          Active: <span className="text-slate-400">{audUser.lastActiveAt ? new Date(audUser.lastActiveAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}</span>
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="h-full flex items-center justify-center text-center py-4 border border-dashed border-slate-800/85 rounded-xl">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-normal">
+                      No users have registered with your code yet
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Box 1: Audience Community Connection */}
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-orange-600/10 p-2.5 rounded-xl">
+                    <Sparkles className="w-5 h-5 text-orange-500 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-white text-sm uppercase tracking-wider">
+                      Part of {hostMeetingsData.hostName || user?.hostReferralCode || 'Our'} Community
+                    </h4>
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight font-sans">Verified Community Member</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800 space-y-3">
+                  <p className="text-xs text-slate-300 leading-normal font-sans">
+                    You are part of <span className="text-orange-400 font-extrabold">{hostMeetingsData.hostName || 'your sponsor'}</span>'s exclusive community! Access live workspaces, custom creator announcements, and fast-track entries.
+                  </p>
+
+                  {(user?.hostReferralCode || hostMeetingsData.hostReferralCode) && (
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-sans">
+                      <span className="text-slate-500 font-black uppercase tracking-wider text-[9px]">Sponsor Code</span>
+                      <span className="font-mono text-orange-400 font-black tracking-wider uppercase">
+                        {user?.hostReferralCode || hostMeetingsData.hostReferralCode}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {/* Refer a Friend Button */}
+                <button
+                  onClick={openInviteModal}
+                  className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-black uppercase tracking-widest text-xs rounded-2xl transition-all flex items-center justify-center gap-2 group shadow-xl shadow-orange-600/10 font-sans"
+                >
+                  <Gift className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+                  <span>Refer a Friend</span>
+                </button>
+
+                <p className="text-[9px] text-center font-black text-slate-500 uppercase tracking-widest font-sans">
+                  Shares host invite link directly to centralized space
+                </p>
+              </div>
+            </div>
+
+            {/* Box 2: Z-Meet Community Perks */}
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-purple-600/10 p-2.5 rounded-xl">
+                    <Shield className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-white text-sm uppercase tracking-wider">Community Hub Perks</h4>
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Your space features</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 font-sans">
+                  <div className="flex gap-2.5 items-start">
+                    <div className="p-1 rounded bg-orange-500/10 text-orange-400 shrink-0 mt-0.5 animate-pulse">
+                      <Megaphone className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-200">Creator Broadcasts</p>
+                      <p className="text-[10px] text-slate-400">Receive live notifications directly when your Host schedules or launches a stream.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2.5 items-start">
+                    <div className="p-1 rounded bg-purple-500/10 text-purple-400 shrink-0 mt-0.5">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-200">Centralized Audience</p>
+                      <p className="text-[10px] text-slate-400">Your network links cleanly under the direct command of the original Host.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2.5 items-start">
+                    <div className="p-1 rounded bg-blue-500/10 text-blue-400 shrink-0 mt-0.5">
+                      <Zap className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-200">Interactive Workspace</p>
+                      <p className="text-[10px] text-slate-400">Experience interactive live overlays, push reminders, and collaborative rooms.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[9px] text-slate-500 uppercase tracking-widest font-black flex items-center justify-center gap-1.5 mt-4 p-2 bg-slate-950/20 border border-slate-800/40 rounded-xl font-mono">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span>Ecosystem Synced with {hostMeetingsData.hostName || 'Host'}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Host Broadcasting & Notifications Portal */}
+        {isHostOrAdmin && (
+          <div className="bg-slate-900/40 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="bg-orange-600/10 p-2.5 rounded-xl">
+                <Megaphone className="w-5 h-5 text-orange-500 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="font-black text-white text-sm uppercase tracking-wider">Host Broadcasting Portal</h4>
+                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Broadcast custom notifications and reminders to your active audience</p>
+              </div>
+            </div>
+
+            {audienceData.count === 0 ? (
+              <div className="p-6 bg-slate-950/20 border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center gap-2">
+                <Info className="w-6 h-6 text-slate-500" />
+                <p className="text-xs font-bold text-slate-400">Broadcasting Portal Locked</p>
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest max-w-xs leading-normal">
+                  Invite friends using your Referral Hub code to unlock audience-wide broadcasts and live reminders!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Type A: Custom Audience Announcement */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Type A: Send Announcement</span>
+                  </div>
+                  <div className="relative">
+                    <textarea
+                      rows={3}
+                      placeholder="Enter announcement text... e.g. 'Starting our special Q&A session in 5 minutes!'"
+                      value={announcementText}
+                      onChange={(e) => setAnnouncementText(e.target.value)}
+                      className="w-full bg-slate-950/60 border border-slate-[0.08] rounded-2xl p-4 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-orange-500/60 resize-none font-sans"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={sendingReminder || !announcementText.trim()}
+                    onClick={() => handleSendReminderOrAnnouncement('announcement')}
+                    className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    Dispatch Announcement
+                  </button>
+                </div>
+
+                {/* Type B: Meeting Reminders */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Type B: Live Meeting Reminder</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {/* Select Meeting */}
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest block font-sans">Select Scheduled Meeting</label>
+                      <select
+                        value={selectedMeetingCode}
+                        onChange={(e) => setSelectedMeetingCode(e.target.value)}
+                        className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-orange-500/60 bg-slate-950 font-sans"
+                      >
+                        <option value="">-- No Meeting linked (Raw Alert) --</option>
+                        {history
+                          .filter(m => !m.isLive)
+                          .map(m => (
+                            <option key={m._id} value={m.code}>{m.title} ({m.code})</option>
+                          ))}
+                      </select>
+                    </div>
+
+                    {/* Timing Tier Selection */}
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest block font-sans">Timing Interval Alert</label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                        {['Live Now', '10 Minutes', '30 Minutes', '1 Hour', 'Custom Time'].map((tier) => (
+                          <button
+                            key={tier}
+                            type="button"
+                            onClick={() => setSelectedTimeTier(tier)}
+                            className={cn(
+                              "py-1.5 px-1 rounded-lg text-[9px] font-black uppercase tracking-tight border text-center transition-all",
+                              selectedTimeTier === tier 
+                                ? "bg-orange-600/20 border-orange-500 text-orange-400" 
+                                : "bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-300 hover:border-slate-700"
+                            )}
+                          >
+                            {tier}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Custom Minutes Input if Custom Time */}
+                    {selectedTimeTier === 'Custom Time' && (
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest block font-sans">Custom Delay (Minutes)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={1440}
+                          value={customMin}
+                          onChange={(e) => setCustomMin(parseInt(e.target.value) || 15)}
+                          className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-orange-500/60 font-mono"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={sendingReminder}
+                    onClick={() => handleSendReminderOrAnnouncement('reminder')}
+                    className="w-full py-2.5 bg-slate-800 border border-slate-700 hover:border-slate-600 hover:bg-slate-700 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Megaphone className="w-3.5 h-3.5" />}
+                    Dispatch Reminder
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
 
 
@@ -768,6 +1207,146 @@ export const Dashboard = () => {
                 Schedule Now
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+
+      {/* Invite Friends Modal */}
+      {isInviteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between font-sans">
+              <h3 className="text-xl font-black text-white uppercase tracking-tighter">Invite Friends</h3>
+              <button 
+                onClick={() => setIsInviteModalOpen(false)}
+                className="p-2 hover:bg-slate-800 rounded-xl text-slate-500 transition-colors"
+                id="close-invite-modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {inviteLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400 font-sans">
+                <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                <p className="text-xs font-bold uppercase tracking-wider font-sans">Loading invite details...</p>
+              </div>
+            ) : (!inviteHostData || !inviteHostData.referralCode || !inviteHostData.inviteLink) ? (
+              <div className="py-8 text-center space-y-4 font-sans">
+                <div className="inline-flex p-3 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/10">
+                  <Info className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 uppercase mt-1 font-bold">Unable to load invite information</p>
+                </div>
+                <p className="text-[9px] text-slate-500 font-mono tracking-normal leading-normal max-w-[280px] mx-auto">
+                  Failed to fetch community details. Please try again or check your account sponsorship if you are a community member.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <p className="text-xs text-slate-400 font-medium font-sans">
+                    Help grow <span className="text-orange-400 font-extrabold">{inviteHostData.hostName || 'your'}</span>'s Community
+                  </p>
+                </div>
+
+                {/* Invite Link panel */}
+                <div className="space-y-2 font-sans">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1 block">🔗 Invite Link</label>
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1 bg-slate-950/60 p-3 rounded-2xl border border-slate-800 flex items-center overflow-hidden">
+                      <p className="text-orange-400 font-mono text-xs truncate select-all w-full leading-none mt-0.5">
+                        {inviteHostData.inviteLink}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteHostData.inviteLink || '');
+                        toast.success('Invite link copied!');
+                      }}
+                      className="p-3 bg-orange-600/20 hover:bg-orange-600 border border-orange-500/20 hover:border-orange-500 text-orange-400 hover:text-white rounded-2xl transition-all shrink-0 flex items-center justify-center group"
+                      title="Copy Link"
+                      id="copy-invite-link-btn"
+                    >
+                      <Copy className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Referral Code panel */}
+                <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-800 flex items-center justify-between font-sans">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-black text-slate-400 uppercase tracking-wider block">📋 Referral Code</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-orange-400 font-extrabold text-sm tracking-wider uppercase bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                      {inviteHostData.referralCode}
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteHostData.referralCode || '');
+                        toast.success('Referral code copied!');
+                      }}
+                      className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors"
+                      title="Copy Code"
+                      id="copy-referral-code-btn"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Social Invite Action Buttons */}
+                <div className="space-y-3 pt-2 font-sans">
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* WhatsApp */}
+                    <button
+                      onClick={() => shareToWhatsapp(inviteHostData.inviteLink || '', inviteHostData.hostName || 'Host')}
+                      className="py-2.5 px-3 bg-emerald-600/10 hover:bg-emerald-600 border border-emerald-500/20 hover:text-white text-emerald-400 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                      id="share-whatsapp-btn"
+                    >
+                      WhatsApp
+                    </button>
+
+                    {/* Telegram */}
+                    <button
+                      onClick={() => shareToTelegram(inviteHostData.inviteLink || '', inviteHostData.hostName || 'Host')}
+                      className="py-2.5 px-3 bg-sky-600/10 hover:bg-sky-600 border border-sky-500/20 hover:text-white text-sky-400 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                      id="share-telegram-btn"
+                    >
+                      Telegram
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Copy Link */}
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteHostData.inviteLink || '');
+                        toast.success('Invite link copied!');
+                      }}
+                      className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-black uppercase tracking-widest rounded-xl transition-all border border-slate-700 flex items-center justify-center gap-2"
+                      id="copy-link-alt-btn"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      Copy Link
+                    </button>
+
+                    {/* Native Share */}
+                    <button
+                      onClick={() => shareNative(inviteHostData.inviteLink || '', inviteHostData.hostName || 'Host')}
+                      className="py-2.5 px-3 bg-orange-600/20 hover:bg-orange-600 border border-orange-500/20 text-orange-400 hover:text-white text-[11px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                      id="share-native-btn"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-orange-400" />
+                      Native Share
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

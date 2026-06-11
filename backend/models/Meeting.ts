@@ -4,7 +4,7 @@ export interface IMeeting extends Document {
   title: string;
   code: string; // Unique meeting code
   host: mongoose.Types.ObjectId;
-  creatorId?: mongoose.Types.ObjectId;
+  audienceId?: mongoose.Types.ObjectId;
   startTime: string;
   endTime?: string;
   isLive: boolean;
@@ -18,7 +18,7 @@ const MeetingSchema: Schema = new Schema({
   title: { type: String, required: true },
   code: { type: String, required: true, unique: true },
   host: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  creatorId: { type: Schema.Types.ObjectId, ref: 'User' },
+  audienceId: { type: Schema.Types.ObjectId, ref: 'User' },
   startTime: { type: String, default: () => new Date().toISOString() },
   endTime: { type: String },
   isLive: { type: Boolean, default: true },

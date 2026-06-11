@@ -4,8 +4,8 @@ export interface User {
   email: string;
   avatar?: string;
   token?: string;
-  role?: 'admin' | 'developer' | 'co-admin' | 'creator' | 'user' | 'host';
-  creatorId?: string;
+  role?: 'admin' | 'developer' | 'co-admin' | 'audience' | 'user' | 'host';
+  audienceId?: string;
   audience?: string[];
   referralCode?: string;
   referredBy?: string;

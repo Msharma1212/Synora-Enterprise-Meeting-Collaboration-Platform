@@ -108,7 +108,7 @@ export const HistoryPage = () => {
         ) : displayedHistory.length > 0 ? (
           displayedHistory.map((meeting) => {
             const isMeetingHostOrAdmin = user?.role === 'admin' || user?.role === 'developer' || user?.role === 'co-admin' || user?.role === 'host' ||
-                                         (meeting as any).host === user?._id || (meeting as any).creatorId === user?._id ||
+                                         (meeting as any).host === user?._id || (meeting as any).audienceId === user?._id ||
                                          (typeof (meeting as any).host === 'object' && (meeting as any).host?._id === user?._id);
             return (
               <div 

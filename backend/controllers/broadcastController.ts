@@ -61,7 +61,7 @@ export const createBroadcast = async (req: any, res: Response) => {
     const broadcast = await Broadcast.create({
       hostId: req.user._id,
       hostName: req.user.name || 'Host',
-      creatorId: req.user._id,
+      audienceId: req.user._id,
       title,
       message,
       meetingCode: finalCode,

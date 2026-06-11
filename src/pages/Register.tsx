@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from '../hooks/useTranslation';
 import api from '../services/api';
@@ -14,14 +14,49 @@ export const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
+  const [helperCode, setHelperCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [shake, setShake] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [showPortal, setShowPortal] = useState(false);
   const [authorizedUser, setAuthorizedUser] = useState<any>(null);
+  const [searchParams] = useSearchParams();
+  const [hostCommunityName, setHostCommunityName] = useState<string | null>(null);
+  const [isVerifyingRef, setIsVerifyingRef] = useState(false);
   const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    const refCode = searchParams.get('ref');
+    const helperParam = searchParams.get('helper');
+    if (helperParam) {
+      setHelperCode(helperParam.trim());
+    }
+    if (refCode) {
+      const trimmed = refCode.trim();
+      setReferralCode(trimmed);
+      setIsVerifyingRef(true);
+      api.get(`/auth/referral-info/${trimmed}`)
+        .then(({ data }) => {
+          setHostCommunityName(data.name);
+          toast.success(`Joining ${data.name}'s Community!`, {
+            icon: '👋',
+            style: {
+              background: '#0B0E14',
+              color: '#f97316',
+              border: '1px solid rgba(249, 115, 22, 0.2)',
+            }
+          });
+        })
+        .catch(() => {
+          setHostCommunityName(null);
+        })
+        .finally(() => {
+          setIsVerifyingRef(false);
+        });
+    }
+  }, [searchParams]);
 
   React.useEffect(() => {
     if (user) {
@@ -41,7 +76,8 @@ export const Register = () => {
         name, 
         email, 
         password, 
-        referralCode: referralCode.trim() 
+        referralCode: referralCode.trim(),
+        helperCode: helperCode.trim() || undefined
       });
       setIsSuccess(true);
       setAuthorizedUser(data);
@@ -245,6 +281,25 @@ export const Register = () => {
             >
               {/* Internal glow line effect */}
               <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-orange-500/40 to-transparent"></div>
+
+              {/* Host Community Joining Banner */}
+              {hostCommunityName && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20 flex items-center gap-3 shadow-inner shadow-orange-500/5"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-orange-600/20 flex items-center justify-center text-orange-400 shrink-0">
+                    <Sparkles className="w-4.5 h-4.5 text-orange-400 animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-orange-500 leading-none mb-1">EXCLUSIVE COMMUNITY INVITE</p>
+                    <h4 className="text-xs font-bold text-slate-100 tracking-tight">
+                      Joining <span className="text-orange-400 font-extrabold">{hostCommunityName}</span>'s Community
+                    </h4>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Dynamic Switching sliding toggle at local bar */}
               <div className="flex bg-slate-950/60 p-1.5 rounded-2xl border border-white/5 mb-8">

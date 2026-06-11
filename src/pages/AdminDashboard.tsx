@@ -416,7 +416,7 @@ export const AdminDashboard = () => {
                                     u.role === 'developer' ? 'bg-red-500/10 text-red-500 border-red-500/10' :
                                     u.role === 'admin' ? 'bg-[#10b981]/15 text-[#10b981] border-[#10b981]/15' :
                                     u.role === 'co-admin' ? 'bg-teal-500/10 text-teal-400 border-teal-500/10' :
-                                    u.role === 'creator' ? 'bg-purple-500/10 text-purple-400 border-purple-500/10' :
+                                    u.role === 'audience' ? 'bg-purple-500/10 text-purple-400 border-purple-500/10' :
                                     u.role === 'host' ? 'bg-amber-500/10 text-amber-500 border-amber-500/10' : ''
                                   }`}>
                                     {u.role}
@@ -481,7 +481,7 @@ export const AdminDashboard = () => {
                                 userDetails.user.role === 'developer' ? 'bg-red-500/10 text-red-500 border-red-500/10' :
                                 userDetails.user.role === 'admin' ? 'bg-[#10b981]/15 text-[#10b981] border-[#10b981]/15' :
                                 userDetails.user.role === 'co-admin' ? 'bg-teal-500/10 text-teal-400 border-teal-500/10' :
-                                userDetails.user.role === 'creator' ? 'bg-purple-500/10 text-purple-400 border-purple-500/10' :
+                                userDetails.user.role === 'audience' ? 'bg-purple-500/10 text-purple-400 border-purple-500/10' :
                                 userDetails.user.role === 'host' ? 'bg-amber-500/10 text-amber-500 border-amber-500/10' : ''
                               }`}>
                                 {userDetails.user.role}
@@ -514,70 +514,104 @@ export const AdminDashboard = () => {
                     </div>
 
                     {/* Action controllers buttons */}
-                    <div className="space-y-2 border-t border-b border-white/5 py-5">
-                      <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest block px-1">Admin Command Panel</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button 
-                          onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'admin' ? 'user' : 'admin')}
-                          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
-                        >
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>{userDetails.user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}</span>
-                        </button>
+                    {(() => {
+                      const getRoleLevel = (r?: string): number => {
+                        switch (r?.toLowerCase()) {
+                          case 'developer': return 4;
+                          case 'admin':
+                          case 'host':
+                          case 'co-admin': return 3;
+                          case 'audience': return 2;
+                          case 'user': return 1;
+                          default: return 1;
+                        }
+                      };
 
-                        <button 
-                          onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'creator' ? 'user' : 'creator')}
-                          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
-                        >
-                          <Radio className="w-3.5 h-3.5 text-purple-400" />
-                          <span>{userDetails.user.role === 'creator' ? 'Remove Creator' : 'Make Creator'}</span>
-                        </button>
+                      const actorLevel = getRoleLevel(currentUser?.role);
+                      const targetLevel = getRoleLevel(userDetails.user.role);
+                      const cannotManage = targetLevel >= actorLevel;
 
-                        <button 
-                          onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'developer' ? 'user' : 'developer')}
-                          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
-                        >
-                          <Zap className="w-3.5 h-3.5 text-blue-400" />
-                          <span>{userDetails.user.role === 'developer' ? 'Remove Dev' : 'Make Dev'}</span>
-                        </button>
+                      return (
+                        <div className="space-y-2 border-t border-b border-white/5 py-5">
+                          <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest block px-1">Admin Command Panel</span>
+                          {cannotManage ? (
+                            <div className="p-3 bg-red-950/10 border border-red-500/10 rounded-xl text-[10px] text-red-400 font-bold uppercase tracking-widest leading-relaxed">
+                              Hierarchy Lock: This user holds a higher or equal role level. Access denied.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                              {/* Only Developer (Level 4) can manage Admin or Co-Admin roles */}
+                              {actorLevel > 3 && (
+                                <>
+                                  <button 
+                                    onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'admin' ? 'user' : 'admin')}
+                                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
+                                  >
+                                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>{userDetails.user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}</span>
+                                  </button>
 
-                        <button 
-                          onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'co-admin' ? 'user' : 'co-admin')}
-                          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
-                        >
-                          <Users className="w-3.5 h-3.5 text-teal-400" />
-                          <span>{userDetails.user.role === 'co-admin' ? 'Remove Co-Admin' : 'Make Co-Admin'}</span>
-                        </button>
+                                  <button 
+                                    onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'co-admin' ? 'user' : 'co-admin')}
+                                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
+                                  >
+                                    <Users className="w-3.5 h-3.5 text-teal-400" />
+                                    <span>{userDetails.user.role === 'co-admin' ? 'Remove Co-Admin' : 'Make Co-Admin'}</span>
+                                  </button>
 
-                        <button 
-                          onClick={() => handleForceLogout(userDetails.user._id)}
-                          className="px-4 py-2.5 bg-slate-900 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/10 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 flex items-center justify-center gap-2"
-                        >
-                          <LogOut className="w-3.5 h-3.5" />
-                          <span>Force Logout</span>
-                        </button>
+                                  <button 
+                                    onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'developer' ? 'user' : 'developer')}
+                                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
+                                  >
+                                    <Zap className="w-3.5 h-3.5 text-blue-400" />
+                                    <span>{userDetails.user.role === 'developer' ? 'Remove Dev' : 'Make Dev'}</span>
+                                  </button>
+                                </>
+                              )}
 
-                        <button 
-                          onClick={() => handleBanToggle(userDetails.user._id, userDetails.user.isBanned)}
-                          className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 border ${
-                            userDetails.user.isBanned 
-                              ? 'bg-emerald-600/10 text-emerald-400 border-emerald-500/10 hover:bg-emerald-600/20' 
-                              : 'bg-red-600/10 text-red-500 border-red-500/10 hover:bg-red-600/20'
-                          }`}
-                        >
-                          {userDetails.user.isBanned ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldX className="w-3.5 h-3.5" />}
-                          <span>{userDetails.user.isBanned ? 'Unlock Account' : 'Ban Account'}</span>
-                        </button>
+                              {/* Admins and above can manage Audiences */}
+                              {actorLevel > 2 && (
+                                <button 
+                                  onClick={() => handleRoleChange(userDetails.user._id, userDetails.user.role === 'audience' ? 'user' : 'audience')}
+                                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 hover:text-white flex items-center justify-center gap-2"
+                                >
+                                  <Radio className="w-3.5 h-3.5 text-purple-400" />
+                                  <span>{userDetails.user.role === 'audience' ? 'Remove Audience' : 'Make Audience'}</span>
+                                </button>
+                              )}
 
-                        <button 
-                          onClick={() => deleteUser(userDetails.user._id)}
-                          className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/10 col-span-2 mt-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete User Account</span>
-                        </button>
-                      </div>
-                    </div>
+                              <button 
+                                onClick={() => handleForceLogout(userDetails.user._id)}
+                                className="px-4 py-2.5 bg-slate-900 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/10 border border-white/5 text-xs font-black uppercase tracking-wider rounded-xl transition-all text-slate-300 flex items-center justify-center gap-2"
+                              >
+                                <LogOut className="w-3.5 h-3.5" />
+                                <span>Force Logout</span>
+                              </button>
+
+                              <button 
+                                onClick={() => handleBanToggle(userDetails.user._id, userDetails.user.isBanned)}
+                                className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 border ${
+                                  userDetails.user.isBanned 
+                                    ? 'bg-emerald-600/10 text-emerald-400 border-emerald-500/10 hover:bg-emerald-600/20' 
+                                    : 'bg-red-600/10 text-red-500 border-red-500/10 hover:bg-red-600/20'
+                                }`}
+                              >
+                                {userDetails.user.isBanned ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldX className="w-3.5 h-3.5" />}
+                                <span>{userDetails.user.isBanned ? 'Unlock Account' : 'Ban Account'}</span>
+                              </button>
+
+                              <button 
+                                onClick={() => deleteUser(userDetails.user._id)}
+                                className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/10 col-span-2 mt-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete User Account</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Operational metrics stats grid */}
                     <div className="grid grid-cols-2 gap-3 pb-3">

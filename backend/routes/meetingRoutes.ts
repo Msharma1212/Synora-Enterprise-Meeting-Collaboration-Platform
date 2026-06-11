@@ -13,7 +13,8 @@ import {
   askAI,
   getMeetingByCode,
   getHostMeetings,
-  getLiveBroadcasts
+  getLiveBroadcasts,
+  sendMeetingReminder
 } from '../controllers/meetingController';
 import { protect } from '../middleware/authMiddleware';
 
@@ -21,6 +22,7 @@ const router = express.Router();
 
 router.post('/create', protect, createMeeting);
 router.post('/schedule', protect, scheduleMeeting);
+router.post('/send-reminder', protect, sendMeetingReminder);
 router.get('/broadcasts', protect, getLiveBroadcasts);
 router.get('/join', protect, getMeetingByCode);
 router.post('/join', protect, joinMeeting);

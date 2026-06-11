@@ -1,49 +1,174 @@
-<<<<<<< HEAD
-# Z Meet 🚀
+<div align="center">
 
-A modern real-time video conferencing and community platform inspired by Zoom, Google Meet, and creator-focused communities.
+# 🚀 Z Meet
 
-## Features
+### Next-Generation Video Conferencing & Community Platform
 
-- HD Video & Audio Meetings
-- Screen Sharing
+Real-time video meetings, screen sharing, audience management, referral-based communities, and creator-focused engagement features — all in one platform.
+
+</div>
+
+---
+
+## 🌟 Overview
+
+Z Meet is a modern video conferencing and community-building platform inspired by Zoom, Google Meet, and creator ecosystems.
+
+The platform enables hosts to manage audiences, conduct live meetings, share screens, collaborate in real time, and build engaged communities through referral-based growth and notification systems.
+
+---
+
+## ✨ Key Features
+
+### 🎥 Real-Time Video Conferencing
+
+- HD Video & Audio Communication
+- Multi-Participant Meetings
+- Responsive Meeting Experience
+- Active Speaker Detection
+
+### 🖥️ Advanced Screen Sharing
+
+- Full-Screen Presentation Mode
+- Presenter-Focused Layout
+- Zoom In / Zoom Out Controls
+- Cross-Device Support
+
+### 👥 Community & Audience System
+
+- Audience Management
+- Referral-Based Community Growth
+- Community Invite Links
+- Audience Tracking
+
+### 🔐 Role-Based Access Control
+
+- Developer
+- Host / Admin
+- Audience
+
+Permission hierarchy ensures lower roles cannot manage higher roles.
+
+### 💬 Collaboration Features
+
 - Live Chat
+- Hand Raise System
+- Participant Management
 - Waiting Room System
-- Role-Based Access Control (Developer, Host, Audience)
-- Hand Raise Feature
-- Meeting Controls (Mute, Camera, Remove User)
-- Audience & Referral System
-- Host Community Management
-- Live Meeting Notifications
-- Responsive UI (Desktop, Tablet, Mobile)
-=======
 
+### 🔔 Engagement Features
 
-## Tech Stack
+- Meeting Notifications
+- Community Invites
+- Audience Analytics
+- Top Community Helpers
 
-- React.js
+### 📱 Responsive Design
+
+- Desktop
+- Tablet
+- Mobile
+
+---
+
+## 🏗️ Tech Stack
+
+### Frontend
+
+- React
 - TypeScript
-- Node.js
-- Socket.IO
-- WebRTC
-- Firebase
-- MongoDB
 - Tailwind CSS
 
-## Key Highlights
+### Backend
 
-- Real-time multi-user video conferencing
-- Zoom-style screen sharing experience
-- Creator/Audience ecosystem
-- Referral-based community growth system
-- Secure role hierarchy and permissions
-- Modern responsive UI/UX
+- Node.js
+- Express.js
+- Socket.IO
 
-## Installation
+### Real-Time Communication
+
+- WebRTC
+- WebSockets
+
+### Database
+
+- MongoDB
+
+### AI Integration
+
+- Google Gemini API
+
+---
+
+## 🚀 Installation
+
+Clone the repository:
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Msharma1212/z-meet.git
+```
+
+Move into project directory:
+
+```bash
 cd z-meet
+```
+
+Install dependencies:
+
+```bash
 npm install
+```
+
+Create environment file:
+
+```env
+GEMINI_API_KEY=your_api_key
+MONGODB_URI=your_database_url
+JWT_SECRET=your_secret
+```
+
+Start development server:
+
+```bash
 npm run dev
->>>>>>> b219ce1e5f71f4690cc0637291ed3a99d3b0ae89
+```
+
+---
+
+## 🎯 Highlights
+
+- Real-Time Multi-User Video Meetings
+- Professional Screen Sharing Experience
+- Community & Audience Ecosystem
+- Secure Role Management System
+- Creator-Centric Features
+- Modern Responsive UI/UX
+
+---
+
+## 🔮 Future Roadmap
+
+- PWA Support
+- Mobile Application
+- Meeting Recordings
+- Live Streaming
+- Advanced Analytics
+- Push Notifications
+- AI Meeting Assistant
+
+---
+
+## 👨‍💻 Author
+
+**Mayank Sharma**
+
+GitHub: https://github.com/Msharma1212
+
+---
+
+<div align="center">
+
+⭐ If you like this project, consider giving it a star.
+
+</div>

@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const broadcastSchema = new mongoose.Schema({
   hostName: { type: String, required: true },
   hostId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  creatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  audienceId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   title: { type: String, required: true },
   message: { type: String, required: true },
   meetingCode: { type: String },

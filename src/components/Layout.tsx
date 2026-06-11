@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
+import api from '../services/api';
 import { 
   Video, 
   PlusSquare, 
@@ -58,6 +59,168 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       toast.error(payload.reason || "You have been logged out by an administrator.");
       logout();
       navigate('/login');
+    });
+
+    // 1. Double-Layer Active Live Notification System
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        const hasPrompted = sessionStorage.getItem('notifications_prompted');
+        if (!hasPrompted) {
+          sessionStorage.setItem('notifications_prompted', 'true');
+          toast((t_toast) => (
+            <div className="flex flex-col gap-2 p-1 font-sans text-left">
+              <span className="font-bold text-slate-100 text-sm">Allow Notifications?</span>
+              <span className="text-slate-400 text-xs">Stay updated with live community meetings and scheduled broadcast reminders.</span>
+              <div className="flex gap-2 justify-end mt-2">
+                <button
+                  className="px-3 py-1.5 rounded-lg text-slate-400 hover:bg-white/5 text-xs font-black uppercase tracking-wider"
+                  onClick={() => toast.dismiss(t_toast.id)}
+                >
+                  Later
+                </button>
+                <button
+                  className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-black uppercase tracking-wider"
+                  onClick={() => {
+                    toast.dismiss(t_toast.id);
+                    Notification.requestPermission().then((permission) => {
+                      if (permission === 'granted') {
+                        const mockPushToken = 'token_' + Math.random().toString(36).substring(2, 11).toUpperCase();
+                        localStorage.setItem('push_token', mockPushToken);
+                        api.put('/auth/profile', { notificationToken: mockPushToken })
+                          .catch(err => console.error("Failed to update profile token:", err));
+                        toast.success("Notifications enabled successfully!", { icon: '🔔' });
+                      }
+                    });
+                  }}
+                >
+                  Enable
+                </button>
+              </div>
+            </div>
+          ), {
+            duration: 10000,
+            position: 'top-center',
+            style: {
+              background: '#0B0E14',
+              border: '1px solid rgba(249, 115, 22, 0.2)',
+              padding: '12px',
+              color: '#fff',
+            }
+          });
+        }
+      } else if (Notification.permission === 'granted') {
+        const storedToken = localStorage.getItem('push_token');
+        if (!storedToken) {
+          const mockPushToken = 'token_' + Math.random().toString(36).substring(2, 11).toUpperCase();
+          localStorage.setItem('push_token', mockPushToken);
+          api.put('/auth/profile', { notificationToken: mockPushToken })
+            .catch(err => console.error("Failed to sync profile sub token:", err));
+        }
+      }
+    }
+
+    // 2. Listen for 'meeting-started' events (Host started a meeting live)
+    socket.on("meeting-started", (payload: any) => {
+      console.log("Live meeting started event received:", payload);
+      
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const title = `🔴 ${payload.hostName} is Live!`;
+        const body = `Started meeting: "${payload.meetingTitle}"`;
+        const notification = new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          tag: payload.meetingCode,
+          requireInteraction: true
+        });
+        
+        notification.onclick = () => {
+          window.focus();
+          navigate(`/meeting/${payload.meetingCode}`);
+          notification.close();
+        };
+      }
+      
+      toast((t_toast) => (
+        <div className="flex flex-col gap-1.5 p-1 font-sans text-left">
+          <span className="font-extrabold text-orange-400 text-xs tracking-wider uppercase flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+            Live Now
+          </span>
+          <span className="font-bold text-slate-100 text-sm">{payload.hostName} went live!</span>
+          <span className="text-slate-400 text-xs">Title: {payload.meetingTitle}</span>
+          <button
+            className="w-full mt-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider text-center"
+            onClick={() => {
+              toast.dismiss(t_toast.id);
+              navigate(`/meeting/${payload.meetingCode}`);
+            }}
+          >
+            Join Meeting
+          </button>
+        </div>
+      ), {
+        duration: 20000,
+        position: 'top-right',
+        style: {
+          background: '#07090e',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          padding: '12px',
+          color: '#fff',
+        }
+      });
+    });
+
+    // 3. Listen for scheduled reminders ('audience-reminder' events)
+    socket.on("audience-reminder", (payload: any) => {
+      console.log("Audience reminder event received:", payload);
+      
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const title = `📢 Host Announcement`;
+        const body = payload.message;
+        const notification = new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          tag: payload.meetingCode || 'reminder',
+          requireInteraction: true
+        });
+        
+        notification.onclick = () => {
+          window.focus();
+          if (payload.meetingCode) {
+            navigate(`/meeting/${payload.meetingCode}`);
+          }
+          notification.close();
+        };
+      }
+
+      toast((t_toast) => (
+        <div className="flex flex-col gap-1.5 p-1 font-sans text-left">
+          <span className="font-extrabold text-amber-500 text-xs tracking-wider uppercase">
+            📢 Host Announcement
+          </span>
+          <span className="font-medium text-slate-200 text-sm leading-relaxed">{payload.message}</span>
+          {payload.meetingCode && (
+            <button
+              className="w-full mt-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-black uppercase tracking-wider text-center"
+              onClick={() => {
+                toast.dismiss(t_toast.id);
+                navigate(`/meeting/${payload.meetingCode}`);
+              }}
+            >
+              Go to Broadcast
+            </button>
+          )}
+        </div>
+      ), {
+        duration: 15000,
+        position: 'top-right',
+        style: {
+          background: '#07090e',
+          border: '1px solid rgba(245, 158, 11, 0.2)',
+          padding: '12px',
+          color: '#fff',
+        }
+      });
     });
 
     return () => {

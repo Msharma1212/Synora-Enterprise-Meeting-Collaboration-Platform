@@ -30,7 +30,7 @@ const getDevice = (ua?: string) => {
 
 export const registerUser = async (req: Request, res: Response) => {
   if (!checkDbConnection(res)) return;
-  const { name, email, password, referralCode } = req.body;
+  const { name, email, password, referralCode, helperCode } = req.body;
   try {
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: 'User already exists' });
@@ -48,10 +48,25 @@ export const registerUser = async (req: Request, res: Response) => {
       referredById = referrer._id;
     }
 
+    let invitedById: any = undefined;
+    if (helperCode && typeof helperCode === 'string' && helperCode.trim() !== '') {
+      const helperUpper = helperCode.trim().toUpperCase();
+      const helperUser = await User.findOne({ referralCode: helperUpper });
+      if (helperUser) {
+        invitedById = helperUser._id;
+      }
+    }
+
     const clientIp = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
     const deviceType = getDevice(req.headers['user-agent']);
 
-    const userRole = (email === 'kmayank122004@gmail.com') ? 'developer' : 'user';
+    const userRole = (email === 'kmayank122004@gmail.com') 
+      ? 'developer' 
+      : (referredById ? 'audience' : 'user');
+
+    const hostRefCode = (referralCode && typeof referralCode === 'string') 
+      ? referralCode.trim().toUpperCase() 
+      : undefined;
 
     const user = await User.create({ 
       name, 
@@ -59,6 +74,9 @@ export const registerUser = async (req: Request, res: Response) => {
       password,
       role: userRole, // Force appropriate role
       referredBy: referredById,
+      invitedBy: invitedById,
+      parentHostId: referredById,
+      hostReferralCode: hostRefCode,
       lastActiveAt: new Date(),
       loginHistory: [{
         ip: clientIp,
@@ -66,6 +84,15 @@ export const registerUser = async (req: Request, res: Response) => {
         timestamp: new Date()
       }]
     });
+
+    if (referredById) {
+      // Find Host and add this user to their audience list and increment audienceCount
+      await User.findByIdAndUpdate(referredById, {
+        $addToSet: { audience: user._id },
+        $inc: { audienceCount: 1 }
+      });
+    }
+
     // Log user login/registration event
     AnalyticsLog.create({ event: 'user_login', userId: user._id }).catch(err => console.error("Analytics log error:", err));
     
@@ -225,12 +252,75 @@ export const updateProfile = async (req: any, res: Response) => {
 export const getAudienceStats = async (req: any, res: Response) => {
   if (!checkDbConnection(res)) return;
   try {
-    const audienceCount = await User.countDocuments({ referredBy: req.user._id });
-    const audienceList = await User.find({ referredBy: req.user._id })
-      .select('name email lastActiveAt createdAt referralCode role')
+    const hostId = req.user.id || req.user._id;
+    const audienceCount = await User.countDocuments({ referredBy: hostId });
+    const audienceList = await User.find({ referredBy: hostId })
+      .select('name email lastActiveAt createdAt referralCode role invitedBy')
       .sort({ createdAt: -1 });
-    res.json({ count: audienceCount, users: audienceList });
+
+    // Build the Top Helpers leaderboard by aggregating registrations within this host's space with invitedBy
+    const helperAggregate = await User.aggregate([
+      {
+        $match: {
+          referredBy: new mongoose.Types.ObjectId(hostId),
+          invitedBy: { $ne: null }
+        }
+      },
+      {
+        $group: {
+          _id: '$invitedBy',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    const helpers = [];
+    for (const item of helperAggregate) {
+      if (item._id) {
+        const helperUser = await User.findById(item._id).select('name email avatar role');
+        if (helperUser) {
+          helpers.push({
+            _id: helperUser._id,
+            name: helperUser.name,
+            email: helperUser.email,
+            avatar: helperUser.avatar,
+            role: helperUser.role,
+            count: item.count
+          });
+        }
+      }
+    }
+
+    res.json({
+      count: audienceCount,
+      users: audienceList,
+      helpers: helpers
+    });
+  } catch (error: any) {
+    console.error('Error in getAudienceStats:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getReferralInfo = async (req: Request, res: Response) => {
+  if (!checkDbConnection(res)) return;
+  const { code } = req.params;
+  try {
+    if (!code) return res.status(400).json({ message: 'Referral code is required' });
+    const host = await User.findOne({ referralCode: code.trim().toUpperCase() });
+    if (!host) {
+      return res.status(404).json({ message: 'Referral code is invalid' });
+    }
+    res.json({
+      name: host.name,
+      referralCode: host.referralCode,
+      id: host._id
+    });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
+

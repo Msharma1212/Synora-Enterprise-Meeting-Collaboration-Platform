@@ -180,6 +180,38 @@ async function startServer() {
     };
   }
 
+  const getRoleLevel = (role?: string): number => {
+    switch (role?.toLowerCase()) {
+      case 'developer': return 4;
+      case 'admin':
+      case 'host':
+      case 'co-admin': return 3;
+      case 'audience': return 2;
+      case 'user': return 1;
+      default: return 1;
+    }
+  };
+
+  const checkSocketHierarchy = async (actorUserId: string, targetUserId: string) => {
+    try {
+      if (!actorUserId || !targetUserId) return false;
+      const actor = await User.findById(actorUserId);
+      const target = await User.findById(targetUserId);
+      if (!actor || !target) return false;
+
+      const actorLevel = getRoleLevel(actor.role);
+      const targetLevel = getRoleLevel(target.role);
+
+      // Deny if target level is higher than or equal to requester level
+      if (targetLevel >= actorLevel) {
+        return false;
+      }
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
   io.on("connection", (socket) => {
     console.log("New User Connected:", socket.id);
 
@@ -217,9 +249,9 @@ async function startServer() {
         const meeting = await Meeting.findOne({ code: roomID });
         const userObj = await User.findById(userId);
         if (meeting && userObj) {
-          const creatorId = (meeting as any).creatorId || meeting.host;
-          if (creatorId && userObj._id) {
-            isHost = creatorId.toString() === userObj._id.toString();
+          const audienceId = (meeting as any).audienceId || meeting.host;
+          if (audienceId && userObj._id) {
+            isHost = audienceId.toString() === userObj._id.toString();
           }
           if (userObj.role === 'admin' || userObj.role === 'developer' || userObj.role === 'co-admin') {
             isHost = true;
@@ -230,7 +262,7 @@ async function startServer() {
       } catch (err) {}
 
       console.log("User ID:", userId);
-      console.log("Creator ID:", meetingData ? ((meetingData as any).creatorId || meetingData.host) : "None");
+      console.log("Audience ID:", meetingData ? ((meetingData as any).audienceId || meetingData.host) : "None");
       console.log("Meeting Role:", isHost ? "host" : "participant");
 
       const currentScreenSharers = roomScreenSharers[roomID] || [];
@@ -249,7 +281,16 @@ async function startServer() {
         }
       } catch (err) {}
 
-      const userObj = { socketId: socket.id, userId, name, role };
+      const userObj = { 
+        socketId: socket.id, 
+        userId, 
+        name, 
+        role, 
+        micLocked: false, 
+        cameraLocked: false,
+        isMuted: false,
+        cameraEnabled: true
+      };
 
       if (!users[roomID]) users[roomID] = [];
       
@@ -386,7 +427,16 @@ async function startServer() {
     });
 
     socket.on("raise-hand", (payload) => {
+      if (payload.roomID && users[payload.roomID]) {
+        const targetObj = users[payload.roomID].find((u: any) => u.userId === payload.userID || u.socketId === payload.socketId || u.socketId === socket.id);
+        if (targetObj) {
+          targetObj.handRaised = payload.raised;
+        }
+      }
       io.to(payload.roomID).emit("user-raised-hand", payload);
+      if (payload.roomID && users[payload.roomID]) {
+        io.to(payload.roomID).emit("participants-update", users[payload.roomID]);
+      }
     });
 
     socket.on("emit-reaction", (payload) => {
@@ -428,20 +478,178 @@ async function startServer() {
     });
 
     // Moderation events
-    socket.on("mute-participant", async (payload) => {
-      if (await verifyAuthority(payload.userId, payload.roomID)) {
-        io.to(payload.participantID).emit("force-mute", { roomID: payload.roomID });
+    const handleModerationSocketEvent = async (
+      payload: { userId: string, roomID: string, participantID?: string, targetUserId?: string },
+      action: 'mute' | 'unmute' | 'camera-off' | 'camera-on'
+    ) => {
+      const { userId, roomID } = payload;
+      if (!(await verifyAuthority(userId, roomID))) return;
+
+      const userList = users[roomID];
+      if (!userList) return;
+
+      const targetObj = userList.find((u: any) => 
+        (payload.participantID && u.socketId === payload.participantID) ||
+        (payload.targetUserId && u.userId === payload.targetUserId)
+      );
+
+      if (targetObj) {
+        const isAllowed = await checkSocketHierarchy(userId, targetObj.userId);
+        if (!isAllowed) {
+          console.log(`[Hierarchy Block] User ${userId} tried to ${action} superior/equal user ${targetObj.userId}`);
+          return;
+        }
+
+        const targetSocketId = targetObj.socketId;
+
+        if (action === 'mute') {
+          targetObj.isMuted = true;
+          targetObj.micLocked = true;
+          io.to(targetSocketId).emit("force-mute", { roomID });
+          io.to(targetSocketId).emit("force-mute-user", { roomID });
+        } else if (action === 'unmute') {
+          targetObj.isMuted = false;
+          targetObj.micLocked = false;
+          io.to(targetSocketId).emit("force-unmute", { roomID });
+          io.to(targetSocketId).emit("force-unmute-user", { roomID });
+        } else if (action === 'camera-off') {
+          targetObj.cameraEnabled = false;
+          targetObj.cameraLocked = true;
+          io.to(targetSocketId).emit("force-disable-camera", { roomID });
+          io.to(targetSocketId).emit("force-camera-off", { roomID });
+        } else if (action === 'camera-on') {
+          targetObj.cameraEnabled = true;
+          targetObj.cameraLocked = false;
+          io.to(targetSocketId).emit("force-enable-camera", { roomID });
+          io.to(targetSocketId).emit("force-camera-on", { roomID });
+        }
+
+        io.to(roomID).emit("participants-update", userList);
+      } else if (payload.participantID) {
+        // Fallback to emit just in case targetObj is not stored
+        const fallbackSocketId = payload.participantID;
+        if (action === 'mute') {
+          io.to(fallbackSocketId).emit("force-mute", { roomID });
+        } else if (action === 'unmute') {
+          io.to(fallbackSocketId).emit("force-unmute", { roomID });
+        } else if (action === 'camera-off') {
+          io.to(fallbackSocketId).emit("force-disable-camera", { roomID });
+        } else if (action === 'camera-on') {
+          io.to(fallbackSocketId).emit("force-enable-camera", { roomID });
+        }
+      }
+    };
+
+    socket.on("mute-participant", (payload) => handleModerationSocketEvent(payload, 'mute'));
+    socket.on("mute-user", (payload) => handleModerationSocketEvent(payload, 'mute'));
+    socket.on("force-mute", (payload) => handleModerationSocketEvent(payload, 'mute'));
+
+    socket.on("unmute-user", (payload) => handleModerationSocketEvent(payload, 'unmute'));
+    socket.on("force-unmute", (payload) => handleModerationSocketEvent(payload, 'unmute'));
+
+    socket.on("disable-camera", (payload) => handleModerationSocketEvent(payload, 'camera-off'));
+    socket.on("camera-disable", (payload) => handleModerationSocketEvent(payload, 'camera-off'));
+    socket.on("force-camera-off", (payload) => handleModerationSocketEvent(payload, 'camera-off'));
+
+    socket.on("camera-enable", (payload) => handleModerationSocketEvent(payload, 'camera-on'));
+    socket.on("force-camera-on", (payload) => handleModerationSocketEvent(payload, 'camera-on'));
+
+    socket.on("media-state-updated", (payload) => {
+      const { roomID, userId, isMuted, cameraEnabled, handRaised } = payload;
+      if (roomID && users[roomID]) {
+        const targetObj = users[roomID].find((u: any) => u.socketId === socket.id || u.userId === userId);
+        if (targetObj) {
+          if (isMuted !== undefined) targetObj.isMuted = isMuted;
+          if (cameraEnabled !== undefined) targetObj.cameraEnabled = cameraEnabled;
+          if (handRaised !== undefined) targetObj.handRaised = handRaised;
+        }
+        io.to(roomID).emit("participants-update", users[roomID]);
       }
     });
 
-    socket.on("disable-camera", async (payload) => {
-      if (await verifyAuthority(payload.userId, payload.roomID)) {
-        io.to(payload.participantID).emit("force-disable-camera", { roomID: payload.roomID });
+    socket.on("hand-raised", (payload) => {
+      const { roomID, userId, name } = payload;
+      if (roomID && users[roomID]) {
+        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
+        if (targetObj) {
+          targetObj.handRaised = true;
+        }
+        io.to(roomID).emit("user-raised-hand", { 
+          roomID, 
+          raised: true, 
+          userID: userId || targetObj?.userId, 
+          socketId: socket.id, 
+          name: name || targetObj?.name 
+        });
+        io.to(roomID).emit("participants-update", users[roomID]);
+      }
+    });
+
+    socket.on("hand-lowered", (payload) => {
+      const { roomID, userId } = payload;
+      if (roomID && users[roomID]) {
+        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
+        if (targetObj) {
+          targetObj.handRaised = false;
+        }
+        io.to(roomID).emit("participants-update", users[roomID]);
+      }
+    });
+
+    socket.on("user-muted", (payload) => {
+      const { roomID, userId } = payload;
+      if (roomID && users[roomID]) {
+        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
+        if (targetObj) {
+          targetObj.isMuted = true;
+        }
+        io.to(roomID).emit("participants-update", users[roomID]);
+      }
+    });
+
+    socket.on("user-unmuted", (payload) => {
+      const { roomID, userId } = payload;
+      if (roomID && users[roomID]) {
+        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
+        if (targetObj) {
+          targetObj.isMuted = false;
+        }
+        io.to(roomID).emit("participants-update", users[roomID]);
+      }
+    });
+
+    socket.on("camera-disabled", (payload) => {
+      const { roomID, userId } = payload;
+      if (roomID && users[roomID]) {
+        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
+        if (targetObj) {
+          targetObj.cameraEnabled = false;
+        }
+        io.to(roomID).emit("participants-update", users[roomID]);
+      }
+    });
+
+    socket.on("camera-enabled", (payload) => {
+      const { roomID, userId } = payload;
+      if (roomID && users[roomID]) {
+        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
+        if (targetObj) {
+          targetObj.cameraEnabled = true;
+        }
+        io.to(roomID).emit("participants-update", users[roomID]);
       }
     });
 
     socket.on("remove-participant", async (payload) => {
       if (await verifyAuthority(payload.userId, payload.roomID)) {
+        const targetObj = users[payload.roomID]?.find((u: any) => u.socketId === payload.participantID);
+        if (targetObj) {
+          const isAllowed = await checkSocketHierarchy(payload.userId, targetObj.userId);
+          if (!isAllowed) {
+            console.log(`[Hierarchy Block] User ${payload.userId} tried to remove superior/equal user ${targetObj.userId}`);
+            return;
+          }
+        }
         io.to(payload.participantID).emit("force-remove", { roomID: payload.roomID });
       }
     });
@@ -498,10 +706,26 @@ async function startServer() {
       }
     });
 
-    // Real-Time Creator Invite/Request socket handlers
-    socket.on("send-creator-request", (payload) => {
-      console.log(`[creator-system] Send creator request from ${payload.requesterName} to user ${payload.targetUserId}`);
-      io.to(payload.targetSocketId).emit("creator-request", {
+    // Real-Time Audience Invite/Request socket handlers
+    socket.on("send-audience-request", async (payload) => {
+      console.log(`[audience-system] Send audience request from ${payload.requesterName} to user ${payload.targetUserId}`);
+      try {
+        const actor = await User.findById(payload.requesterId);
+        const target = await User.findById(payload.targetUserId);
+        if (actor && target) {
+          const actorLevel = getRoleLevel(actor.role);
+          const targetLevel = getRoleLevel(target.role);
+          if (targetLevel >= actorLevel) {
+            console.log(`[Hierarchy Block] Cannot nominate superior/equal role level.`);
+            return;
+          }
+          if (2 >= actorLevel) { // nominated to audience (level 2)
+            console.log(`[Hierarchy Block] Requester level is not strictly superior to audience level.`);
+            return;
+          }
+        }
+      } catch (err) {}
+      io.to(payload.targetSocketId).emit("audience-request", {
         requesterName: payload.requesterName,
         requesterId: payload.requesterId,
         targetUserId: payload.targetUserId,
@@ -510,29 +734,49 @@ async function startServer() {
       });
     });
 
-    socket.on("accept-creator-request", async (payload) => {
+    socket.on("accept-audience-request", async (payload) => {
       try {
-        console.log(`[creator-system] User ${payload.targetUserId} accepted creator nomination in room ${payload.roomID}`);
-        await User.findByIdAndUpdate(payload.targetUserId, {
-          role: 'creator',
-          creatorId: payload.hostId
-        });
+        console.log(`[audience-system] User ${payload.targetUserId} accepted audience nomination in room ${payload.roomID}`);
         
-        io.to(payload.roomID).emit("creator-accepted", {
-          targetUserId: payload.targetUserId,
-          hostId: payload.hostId
-        });
+        const user = await User.findById(payload.targetUserId);
+        const host = await User.findById(payload.hostId);
+        if (user && host) {
+          user.role = 'audience';
+          user.parentHostId = host._id as any;
+          user.referredBy = host._id as any;
+          user.hostReferralCode = host.referralCode; // Auto update referral code with host's referralCode
+          await user.save();
+
+          // Create audience relationship: Add user to host audience list
+          await User.findByIdAndUpdate(host._id, {
+            $addToSet: { audience: user._id }
+          });
+          
+          io.to(payload.roomID).emit("audience-accepted", {
+            targetUserId: payload.targetUserId,
+            hostId: payload.hostId
+          });
+
+          // Refresh the user's role property inside connection cache
+          if (users[payload.roomID]) {
+            const userObj = users[payload.roomID].find((u: any) => u.userId === payload.targetUserId);
+            if (userObj) {
+              userObj.role = 'audience';
+            }
+            io.to(payload.roomID).emit("participants-update", users[payload.roomID]);
+          }
+        }
         
         io.to("admin-console").emit("admin-stats-update", getActiveStats());
       } catch (err) {
-        console.error("Error in accept-creator-request:", err);
+        console.error("Error in accept-audience-request:", err);
       }
     });
 
-    socket.on("decline-creator-request", (payload) => {
-      console.log(`[creator-system] User ${payload.targetUserName} declined creator nomination`);
+    socket.on("decline-audience-request", (payload) => {
+      console.log(`[audience-system] User ${payload.targetUserName} declined audience nomination`);
       if (payload.hostSocketId) {
-        io.to(payload.hostSocketId).emit("creator-declined", {
+        io.to(payload.hostSocketId).emit("audience-declined", {
           targetUserName: payload.targetUserName
         });
       }
