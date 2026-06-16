@@ -62,6 +62,15 @@ async function startServer() {
   }
 
   // API Routes
+  app.get("/api/health", (req, res) => {
+    const isDbConnected = mongoose.connection.readyState === 1;
+    res.json({
+      success: true,
+      server: "online",
+      database: isDbConnected ? "connected" : "disconnected"
+    });
+  });
+
   app.use("/api/auth", authRoutes);
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/broadcasts", broadcastRoutes);
@@ -182,13 +191,14 @@ async function startServer() {
 
   const getRoleLevel = (role?: string): number => {
     switch (role?.toLowerCase()) {
-      case 'developer': return 4;
+      case 'developer': return 100;
       case 'admin':
       case 'host':
-      case 'co-admin': return 3;
-      case 'audience': return 2;
-      case 'user': return 1;
-      default: return 1;
+      case 'co-admin': return 80;
+      case 'moderator': return 60;
+      case 'audience':
+      case 'user': return 20;
+      default: return 20;
     }
   };
 

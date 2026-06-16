@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
+import { DebugPanel } from './DebugPanel';
 
 const SidebarItem = ({ icon: Icon, label, href, active }: any) => (
   <Link
@@ -39,6 +40,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const path = location.pathname.substring(1);
+  const [socketStatus, setSocketStatus] = useState<'Connecting...' | 'Connected' | 'Disconnected'>('Connecting...');
 
   const handleLogout = () => {
     logout();
@@ -48,10 +50,28 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (!user?._id) return;
 
-    const socket = io();
+    const socket = io({
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
     
     // Register the current dynamic user session
     socket.emit("register-session", { userId: user._id });
+
+    // Handle connection status listeners
+    socket.on('connect', () => {
+      setSocketStatus('Connected');
+    });
+
+    socket.on('disconnect', () => {
+      setSocketStatus('Disconnected');
+    });
+
+    socket.on('connect_error', () => {
+      setSocketStatus('Connecting...');
+    });
 
     // Handle force-logout on ban/kick trigger
     socket.on("force-logout", (payload: any) => {
@@ -352,9 +372,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               </p>
             </div>
             <div className="flex items-center space-x-2 md:space-x-4">
-              <div className="hidden sm:flex bg-slate-900 border border-slate-800 rounded-full px-3 md:px-4 py-1 md:py-2 items-center space-x-2">
-                <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{t.systemOnline}</span>
+              <div className="flex bg-slate-900 border border-slate-800 rounded-full px-3 md:px-4 py-1 md:py-2 items-center space-x-2">
+                <div className={cn(
+                  "w-1.5 h-1.5 md:w-2 md:h-2 rounded-full",
+                  socketStatus === 'Connected' ? "bg-emerald-500 animate-pulse" :
+                  socketStatus === 'Connecting...' ? "bg-amber-500 animate-pulse" :
+                  "bg-red-500 animate-ping"
+                )}></div>
+                <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{socketStatus}</span>
               </div>
               <Link to="/settings" className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-white text-base md:text-lg shadow-lg shadow-blue-600/20 ring-2 ring-white/5 shrink-0 transition-transform active:scale-95 hover:scale-105">
                 {user?.name?.charAt(0).toUpperCase() || '?'}
@@ -367,6 +392,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           {children}
         </div>
       </main>
+      <DebugPanel socketStatus={socketStatus} />
     </div>
   );
 };

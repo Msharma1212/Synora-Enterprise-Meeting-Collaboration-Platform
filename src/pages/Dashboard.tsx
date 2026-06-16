@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -33,7 +33,8 @@ import {
   TrendingUp,
   Flame,
   Crown,
-  ChevronRight
+  ChevronRight,
+  Trophy
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import toast from 'react-hot-toast';
@@ -57,7 +58,7 @@ export const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Referral states
-  const [hostMeetingsData, setHostMeetingsData] = useState<{ hostName: string | null; hostReferralCode?: string; meetings: Meeting[] }>({ hostName: null, meetings: [] });
+  const [hostMeetingsData, setHostMeetingsData] = useState<{ hostName: string | null; hostReferralCode?: string; hostUsername?: string; meetings: Meeting[] }>({ hostName: null, meetings: [] });
   const [audienceData, setAudienceData] = useState<{ count: number; users: any[]; helpers?: any[] }>({ count: 0, users: [], helpers: [] });
   const [activeChartTab, setActiveChartTab] = useState<'all' | 'growth' | 'attendance' | 'active' | 'invite'>('all');
 
@@ -465,6 +466,81 @@ export const Dashboard = () => {
             <div className="text-xs md:text-xl text-blue-100 font-bold uppercase tracking-widest opacity-90 drop-shadow-md">
               {currentTime.toLocaleDateString(localeCode, { weekday: 'long', day: 'numeric', month: 'long' })}
             </div>
+          </div>
+        </div>
+
+        {/* User Reputation & XP Progress Bento Card */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row items-stretch justify-between gap-6 relative overflow-hidden shrink-0">
+          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+            <Trophy className="w-48 h-48 text-amber-500" />
+          </div>
+          
+          <div className="space-y-4 flex-1">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <span className="text-xs font-black uppercase tracking-widest text-slate-500">My Reputation Level</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/25">
+                {user?.badge || 'Bronze Member'}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-blue-500/10">
+                {user?.level || 1}
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-white uppercase tracking-tight leading-none mb-1">
+                  {user?.name}
+                </h3>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  @{user?.username || 'user'}
+                </p>
+              </div>
+            </div>
+
+            {/* Level progress bar */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
+                <span>XP: {(user?.xp || 0).toLocaleString()}</span>
+                <span>
+                  {user?.xp && user.xp >= 1000 ? 'MAX LEVEL' : `${((user?.xp || 0) % 250).toLocaleString()} / 250 XP TO NEXT LEVEL`}
+                </span>
+              </div>
+              <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800/80">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${Math.min(100, (((user?.xp || 0) % 250) / 250) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t md:border-t-0 md:border-l border-slate-800/80 pt-6 md:pt-0 md:pl-8 flex flex-col justify-center gap-4 min-w-[200px] shrink-0">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-slate-950/65 p-3 rounded-2xl text-center border border-slate-900">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Attended</span>
+                <strong className="text-white text-sm font-black">{user?.meetingsAttended || 0}</strong>
+              </div>
+              <div className="bg-slate-950/65 p-3 rounded-2xl text-center border border-slate-900">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Invited</span>
+                <strong className="text-white text-sm font-black">{user?.inviteCount || 0}</strong>
+              </div>
+            </div>
+
+            {/* Link to Sponsor's Public Community Hub if applicable */}
+            {hostMeetingsData.hostUsername ? (
+              <Link
+                to={`/community/${hostMeetingsData.hostUsername}`}
+                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white font-black uppercase tracking-wider text-[10px] rounded-2xl transition-all flex items-center justify-center gap-2 group shrink-0"
+              >
+                <Users className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" />
+                <span>Visit Community Hub</span>
+                <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            ) : user?.hostReferralCode ? (
+              <span className="text-[9px] text-center font-bold text-slate-500 block uppercase tracking-wider">
+                Referred by Sponsor: {user.hostReferralCode}
+              </span>
+            ) : null}
           </div>
         </div>
 

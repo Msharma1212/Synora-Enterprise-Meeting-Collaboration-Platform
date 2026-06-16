@@ -9,6 +9,13 @@ export interface User {
   audience?: string[];
   referralCode?: string;
   referredBy?: string;
+  xp?: number;
+  level?: number;
+  badge?: string;
+  inviteCount?: number;
+  meetingsAttended?: number;
+  lastLoginDate?: string;
+  username?: string;
   settings?: {
     language: string;
     notifications: {

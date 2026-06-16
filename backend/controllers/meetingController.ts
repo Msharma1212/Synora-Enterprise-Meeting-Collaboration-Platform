@@ -514,6 +514,7 @@ export const getHostMeetings = async (req: any, res: Response) => {
     res.json({
       hostName: hostUser ? hostUser.name : 'Your Host',
       hostReferralCode: hostUser ? hostUser.referralCode : undefined,
+      hostUsername: hostUser ? hostUser.username : undefined,
       meetings: meetings
     });
   } catch (error: any) {

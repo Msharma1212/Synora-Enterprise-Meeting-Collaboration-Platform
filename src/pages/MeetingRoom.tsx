@@ -40,6 +40,8 @@ export const MeetingRoomComponent = () => {
   const [peers, setPeers] = useState<any[]>([]);
   const [micActive, setMicActive] = useState(true);
   const [videoActive, setVideoActive] = useState(true);
+  const [isJoined, setIsJoined] = useState(false);
+  const [inWaitingRoom, setInWaitingRoom] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -98,6 +100,47 @@ export const MeetingRoomComponent = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // XP System: Join & Attendance triggers
+  useEffect(() => {
+    if (!isJoined || !code || !user) return;
+
+    // 1. Join Meeting (+10 XP)
+    api.post('/auth/xp/add', { action: 'join_meeting', meetingCode: code })
+      .then(res => {
+        if (res.data?.xpAdded) {
+          toast.success(`+10 XP: Joined meeting "${code}"!`, { icon: '✨' });
+        }
+      })
+      .catch(err => console.error("Error awarding join_meeting XP:", err));
+
+    // 2. 30 Minutes Timer (+20 XP)
+    const timer30 = setTimeout(() => {
+      api.post('/auth/xp/add', { action: 'attend_30m', meetingCode: code })
+        .then(res => {
+          if (res.data?.xpAdded) {
+            toast.success(`+20 XP: Attended 30 minutes!`, { icon: '✨' });
+          }
+        })
+        .catch(err => console.error("Error awarding 30m attendance XP:", err));
+    }, 30 * 60 * 1000);
+
+    // 3. 60 Minutes Timer (+40 XP)
+    const timer60 = setTimeout(() => {
+      api.post('/auth/xp/add', { action: 'attend_1h', meetingCode: code })
+        .then(res => {
+          if (res.data?.xpAdded) {
+            toast.success(`+40 XP: Attended 1 hour!`, { icon: '✨' });
+          }
+        })
+        .catch(err => console.error("Error awarding 1h attendance XP:", err));
+    }, 60 * 60 * 1000);
+
+    return () => {
+      clearTimeout(timer30);
+      clearTimeout(timer60);
+    };
+  }, [isJoined, code, user]);
 
   const formatDuration = (sec: number) => {
     const hrs = Math.floor(sec / 3600);
@@ -267,8 +310,6 @@ export const MeetingRoomComponent = () => {
   const [showCameraMenu, setShowCameraMenu] = useState(false);
   const [searchMember, setSearchMember] = useState('');
   const [hasPermissions, setHasPermissions] = useState(false);
-  const [isJoined, setIsJoined] = useState(false);
-  const [inWaitingRoom, setInWaitingRoom] = useState(false);
   const [waitingUsers, setWaitingUsers] = useState<any[]>([]);
   const [participantsList, setParticipantsList] = useState<any[]>([]);
   const [meetingDetails, setMeetingDetails] = useState<Meeting | null>(null);
@@ -1519,6 +1560,12 @@ export const MeetingRoomComponent = () => {
       });
     }
     toast.success(newState ? "Hand raised" : "Hand lowered");
+
+    // Award Raise Hand XP (+2 XP)
+    if (newState) {
+      api.post('/auth/xp/add', { action: 'raise_hand' })
+        .catch(err => console.error("Error adding raise hand XP:", err));
+    }
   };
 
   const toggleScreenShare = async () => {
@@ -1538,6 +1585,17 @@ export const MeetingRoomComponent = () => {
   };
 
   const startNewScreenShare = async () => {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+      toast.error("Screen sharing not supported in this environment.", {
+        style: {
+          background: '#0f172a',
+          color: '#f87171',
+          border: '1px solid rgba(248, 113, 113, 0.2)',
+        }
+      });
+      return;
+    }
+
     try {
       const requestedStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       if (!isMountedRef.current || exitedRef.current) {
@@ -1580,7 +1638,13 @@ export const MeetingRoomComponent = () => {
       toast.success("Presentation started");
     } catch (err) {
       console.error("Screen share failed", err);
-      toast.error("Screen share failed or cancelled");
+      toast.error("Screen sharing not supported in this environment.", {
+        style: {
+          background: '#0f172a',
+          color: '#f87171',
+          border: '1px solid rgba(248, 113, 113, 0.2)',
+        }
+      });
     }
   };
 
@@ -1632,6 +1696,10 @@ export const MeetingRoomComponent = () => {
 
     socketRef.current.emit("send-message", msgPayload);
     setMessage('');
+
+    // Award Chat Participation XP (+1 XP)
+    api.post('/auth/xp/add', { action: 'chat_participation' })
+      .catch(err => console.error("Error adding chat XP:", err));
   };
 
   const sendReaction = (emoji: string) => {

@@ -132,7 +132,7 @@ export const SettingsPage = () => {
     }
   };
 
-  const languages = ['English (US)', 'Hindi (India)', 'Spanish (ES)', 'French (FR)'];
+  const languages = ['English (US)', 'Hindi (India)', 'Spanish (ES)', 'French (FR)', 'Arabic (AR)'];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

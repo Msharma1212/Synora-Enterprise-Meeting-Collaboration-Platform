@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -9,7 +10,9 @@ import { HistoryPage } from './pages/History';
 import { SettingsPage } from './pages/Settings';
 import { MeetingRoom } from './pages/MeetingRoom';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { Toaster } from 'react-hot-toast';
+import { CommunityPage } from './pages/CommunityPage';
+import { Toaster, toast } from 'react-hot-toast';
+import api from './services/api';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -25,56 +28,79 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 export default function App() {
+  React.useEffect(() => {
+    const checkApiHealth = async () => {
+      try {
+        const { data } = await api.get('/health');
+        console.log('[System Health Check]:', data);
+        if (data.database !== 'connected') {
+          toast.error('Database connection issues detected, persistent features may be limited.', {
+            id: 'db-health-warn',
+            duration: 5000,
+            style: { background: '#0f172a', color: '#f87171' }
+          });
+        }
+      } catch (err: any) {
+        console.error('[Health check failed]:', err);
+        // Silently capture since full dev startup could be still launching or on warm restarts
+      }
+    };
+    checkApiHealth();
+  }, []);
+
   return (
     <AuthProvider>
-      <Router>
-        <Toaster position="top-right" />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route 
-            path="/dashboard" 
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            } 
-          />
-          <Route 
-            path="/history" 
-            element={
-              <PrivateRoute>
-                <HistoryPage />
-              </PrivateRoute>
-            } 
-          />
-          <Route 
-            path="/settings" 
-            element={
-              <PrivateRoute>
-                <SettingsPage />
-              </PrivateRoute>
-            } 
-          />
-          <Route 
-            path="/meeting/:code" 
-            element={
-              <PrivateRoute>
-                <MeetingRoom />
-              </PrivateRoute>
-            } 
-          />
-          <Route 
-            path="/admin" 
-            element={
-              <AdminRoute>
-                <AdminDashboard />
-              </AdminRoute>
-            } 
-          />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Routes>
-      </Router>
+      <LanguageProvider>
+        <Router>
+          <Toaster position="top-right" />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route 
+              path="/dashboard" 
+              element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/history" 
+              element={
+                <PrivateRoute>
+                  <HistoryPage />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/settings" 
+              element={
+                <PrivateRoute>
+                  <SettingsPage />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/meeting/:code" 
+              element={
+                <PrivateRoute>
+                  <MeetingRoom />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/admin" 
+              element={
+                <AdminRoute>
+                  <AdminDashboard />
+                </AdminRoute>
+              } 
+            />
+            <Route path="/community/:username" element={<CommunityPage />} />
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+          </Routes>
+        </Router>
+      </LanguageProvider>
     </AuthProvider>
   );
 }

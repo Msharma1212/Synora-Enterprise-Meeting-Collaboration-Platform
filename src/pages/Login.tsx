@@ -3,13 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from '../hooks/useTranslation';
 import api from '../services/api';
-import { Video, Mail, Lock, Loader2, ArrowRight, ShieldCheck, Sparkles, MessageSquare, Hand, ScreenShare, Radio, CheckCircle2 } from 'lucide-react';
+import { Video, Mail, Lock, Loader2, ArrowRight, ShieldCheck, Sparkles, MessageSquare, Hand, ScreenShare, Radio, CheckCircle2, Globe } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import { PortalTransition } from '../components/PortalTransition';
 
 export const Login = () => {
-  const { t } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
+  const [isLangOpen, setIsLangOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -76,6 +77,17 @@ export const Login = () => {
   const strNewToZMeet = t.newToZMeet || 'New to Z-Meet?';
   const strStreamlinedVideo = t.streamlinedVideo || 'Next-generation video collaboration and real-time screen sharing platform';
 
+  const strConnectMeet = t('connectMeetCollab', 'Connect, Meet & Collab with High Fidelity.');
+  const strLiveWebinar = t('liveWebinarSession', 'Live Webinar Session');
+  const strSarahConnor = t('sarahConnor', 'Sarah Connor');
+  const strRaised = t('raisedHandText', '✋ Hand Raised');
+  const strMuted = t('muted', 'MUTED');
+  const strAlexSharing = t('alexIsSharing', 'Alex is screen sharing...');
+  const strAuthSuccess = t('authorizedSuccessfully', 'Authorized Successfully');
+  const strSecureAirspace = t('enteringSecureCollaborativeAirspace', 'Entering secure collaborative airspace...');
+  const strEncrypted = t('endToEndEncrypted', 'Full End-to-End Encrypted Tunneling');
+  const strDevCredits = t('developerCredits', 'Developed by Mayank Sharma');
+
   return (
     <>
       <AnimatePresence>
@@ -93,6 +105,40 @@ export const Login = () => {
         )}
       </AnimatePresence>
       <div className="min-h-screen bg-[#07090e] text-white flex items-center justify-center p-4 md:p-8 overflow-x-hidden relative font-sans">
+      
+      {/* Floating Language Switcher */}
+      <div className="absolute top-6 right-6 z-50">
+        <div className="relative">
+          <button 
+            type="button"
+            onClick={() => setIsLangOpen(!isLangOpen)}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-full text-slate-300 hover:text-white transition-all text-xs font-bold font-mono tracking-wider backdrop-blur-md cursor-pointer"
+          >
+            <Globe className="w-3.5 h-3.5 text-slate-400" />
+            <span>{language}</span>
+          </button>
+          
+          {isLangOpen && (
+            <div className="absolute right-0 mt-2 w-44 bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-lg">
+              {['English (US)', 'Hindi (India)', 'Spanish (ES)', 'French (FR)', 'Arabic (AR)'].map(lang => (
+                <button 
+                  key={lang}
+                  type="button"
+                  onClick={() => {
+                    setLanguage(lang);
+                    setIsLangOpen(false);
+                    toast.success(`Language: ${lang}`);
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/60 text-slate-400 hover:text-white transition-colors text-xs text-left"
+                >
+                  <span>{lang}</span>
+                  {language === lang && <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
       
       {/* 1. Animated mesh gradient background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -125,7 +171,7 @@ export const Login = () => {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-5xl font-extrabold tracking-tight font-display bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400 leading-[1.1]"
             >
-              Connect, Meet & <br />Collab with High Fidelity.
+              {strConnectMeet}
             </motion.h1>
             
             <motion.p 
@@ -149,7 +195,7 @@ export const Login = () => {
             <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-2xl border border-white/5">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping"></span>
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Live Webinar Session</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">{strLiveWebinar}</span>
               </div>
               <div className="flex gap-1.5">
                 <span className="bg-slate-800 border border-white/5 text-[9px] font-bold text-slate-400 px-2 py-0.5 rounded">ID: 809-ZMT</span>
@@ -180,7 +226,7 @@ export const Login = () => {
 
               <div className="bg-slate-950/80 rounded-2xl border border-white/5 relative overflow-hidden flex items-center justify-center group hover:border-purple-500/30 transition-all duration-300">
                 <div className="absolute top-3 left-3 flex gap-1 items-center">
-                  <span className="text-[8px] font-black tracking-widest uppercase text-slate-400">Sarah Connor</span>
+                  <span className="text-[8px] font-black tracking-widest uppercase text-slate-400">{strSarahConnor}</span>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-[#1e293b] flex items-center justify-center border border-white/10 text-xs font-bold text-indigo-400 shadow-inner">
                   SC
@@ -191,9 +237,9 @@ export const Login = () => {
                   transition={{ repeat: Infinity, duration: 2.5 }}
                   className="absolute top-3 right-3 p-1 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-lg flex items-center gap-1 px-1.5 text-[7px] font-black uppercase tracking-wider"
                 >
-                  <Hand className="w-2.5 h-2.5 fill-current" /> Raised
+                  <Hand className="w-2.5 h-2.5 fill-current" /> {strRaised}
                 </motion.div>
-                <div className="absolute bottom-3 left-3 text-[7px] bg-slate-900 px-1.5 py-0.5 rounded border border-white/5 text-slate-500 font-bold">MUTED</div>
+                <div className="absolute bottom-3 left-3 text-[7px] bg-slate-900 px-1.5 py-0.5 rounded border border-white/5 text-slate-500 font-bold">{strMuted}</div>
               </div>
             </div>
 
@@ -208,7 +254,7 @@ export const Login = () => {
               {/* Dynamic message float note */}
               <div className="text-[9px] font-bold text-slate-300 flex items-center gap-1 bg-slate-900 px-2.5 py-1 rounded-xl border border-white/5">
                 <ScreenShare className="w-3 h-3 text-indigo-400" />
-                <span>Alex is screen sharing...</span>
+                <span>{strAlexSharing}</span>
               </div>
             </div>
           </motion.div>
@@ -280,8 +326,8 @@ export const Login = () => {
                       <CheckCircle2 className="w-8 h-8 animate-pulse" />
                     </motion.div>
                     <div className="space-y-1">
-                      <h4 className="text-xl font-black uppercase tracking-tight text-white font-display">Authorized Successfully</h4>
-                      <p className="text-xs text-slate-400 font-medium">Entering secure collaborative airspace...</p>
+                      <h4 className="text-xl font-black uppercase tracking-tight text-white font-display">{strAuthSuccess}</h4>
+                      <p className="text-xs text-slate-400 font-medium">{strSecureAirspace}</p>
                     </div>
                   </motion.div>
                 ) : (
@@ -388,12 +434,12 @@ export const Login = () => {
             {/* Subtle premium security certification info badge */}
             <div className="flex items-center justify-center gap-2 text-[10px] font-black text-slate-600 uppercase tracking-widest select-none bg-slate-950/20 p-2.5 rounded-2xl border border-white/[0.03]">
               <ShieldCheck className="w-4 h-4 text-emerald-500/60" />
-              <span>Full End-to-End Encrypted Tunneling</span>
+              <span>{strEncrypted}</span>
             </div>
 
             {/* Developer Credits */}
             <div className="text-center opacity-30 select-none">
-              <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">Developed by Mayank Sharma</p>
+              <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">{strDevCredits}</p>
             </div>
             
           </div>

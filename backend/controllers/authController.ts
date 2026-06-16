@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
 import AnalyticsLog from '../models/AnalyticsLog';
+import Meeting from '../models/Meeting';
+import Broadcast from '../models/Broadcast';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 
@@ -78,6 +80,8 @@ export const registerUser = async (req: Request, res: Response) => {
       parentHostId: referredById,
       hostReferralCode: hostRefCode,
       lastActiveAt: new Date(),
+      lastLoginDate: new Date().toISOString().split('T')[0],
+      xp: 0,
       loginHistory: [{
         ip: clientIp,
         device: deviceType,
@@ -91,6 +95,20 @@ export const registerUser = async (req: Request, res: Response) => {
         $addToSet: { audience: user._id },
         $inc: { audienceCount: 1 }
       });
+    }
+
+    if (invitedById) {
+      // Award invite XP to the inviter
+      await User.findByIdAndUpdate(invitedById, {
+        $inc: { xp: 50, inviteCount: 1 }
+      });
+      // Save to trigger level/badge recalculation on pre-save
+      try {
+        const inviter = await User.findById(invitedById);
+        if (inviter) await inviter.save();
+      } catch (err) {
+        console.error("Failed to rerun inviter save pre-save hook:", err);
+      }
     }
 
     // Log user login/registration event
@@ -114,81 +132,146 @@ export const registerUser = async (req: Request, res: Response) => {
 export const loginUser = async (req: Request, res: Response) => {
   if (!checkDbConnection(res)) return;
   const { email, password } = req.body;
+
+  // 1. Validate email and password inputs
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    return res.status(400).json({ success: false, message: 'Email address is required' });
+  }
+  if (!password || typeof password !== 'string' || !password.trim()) {
+    return res.status(400).json({ success: false, message: 'Password is required' });
+  }
+
   try {
-    const user = await User.findOne({ email });
-    if (user && (await user.comparePassword(password))) {
-      if (user.isBanned) {
-        return res.status(403).json({ message: 'Your account has been banned by an administrator.' });
-      }
-
-      const clientIp = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-      const deviceType = getDevice(req.headers['user-agent']);
-
-      user.lastActiveAt = new Date();
-      if (!user.loginHistory) {
-        user.loginHistory = [];
-      }
-      user.loginHistory.unshift({
-        ip: clientIp,
-        device: deviceType,
-        timestamp: new Date()
-      });
-
-      // Limit login history to the 5 most recent entries for ultra-clean auto optimization
-      if (user.loginHistory.length > 5) {
-        user.loginHistory = user.loginHistory.slice(0, 5);
-      }
-
-      // Force developer role for the super admin
-      if (email === 'kmayank122004@gmail.com' && user.role !== 'developer') {
-        user.role = 'developer';
-      }
-
-      // Ensure every logged in user has a referralCode
-      if (!user.referralCode) {
-        const base = (user.name || 'USER').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
-        const random = Math.floor(1000 + Math.random() * 9000);
-        user.referralCode = `${base}${random}`;
-      }
-
-      await user.save();
-
-      // Log user login event
-      AnalyticsLog.create({ event: 'user_login', userId: user._id }).catch(err => console.error("Analytics log error:", err));
-
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        settings: user.settings,
-        referralCode: user.referralCode,
-        referredBy: user.referredBy,
-        token: generateToken(user._id.toString(), user.name, user.role),
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+    // 2. Validate user existence
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
+
+    // Compare password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({ success: false, message: 'Your account has been banned by an administrator.' });
+    }
+
+    const clientIp = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    const deviceType = getDevice(req.headers['user-agent']);
+
+    user.lastActiveAt = new Date();
+    if (!user.loginHistory) {
+      user.loginHistory = [];
+    }
+    user.loginHistory.unshift({
+      ip: clientIp,
+      device: deviceType,
+      timestamp: new Date()
+    });
+
+    // Limit login history to the 5 most recent entries for ultra-clean auto optimization
+    if (user.loginHistory.length > 5) {
+      user.loginHistory = user.loginHistory.slice(0, 5);
+    }
+
+    // Force developer role for the super admin
+    if (email.trim().toLowerCase() === 'kmayank122004@gmail.com' && user.role !== 'developer') {
+      user.role = 'developer';
+    }
+
+    // Handle Daily Login XP
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (user.lastLoginDate !== todayStr) {
+      user.lastLoginDate = todayStr;
+      user.xp = (user.xp || 0) + 5;
+    }
+
+    // Ensure every logged in user has a referralCode
+    if (!user.referralCode) {
+      const base = (user.name || 'USER').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+      const random = Math.floor(1000 + Math.random() * 9000);
+      user.referralCode = `${base}${random}`;
+    }
+
+    await user.save();
+
+    // Log user login event
+    AnalyticsLog.create({ event: 'user_login', userId: user._id }).catch(err => console.error("Analytics log error:", err));
+
+    // 3. Validate JWT generation
+    let token;
+    try {
+      token = generateToken(user._id.toString(), user.name, user.role);
+      if (!token) {
+        throw new Error('JWT generation returned empty token');
+      }
+    } catch (jwtError: any) {
+      console.error("JWT GENERATION ERROR", jwtError);
+      return res.status(500).json({
+        success: false,
+        message: 'Auth system failed to authorize the session. Please contact support.'
+      });
+    }
+
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      settings: user.settings,
+      referralCode: user.referralCode,
+      referredBy: user.referredBy,
+      token,
+    });
   } catch (error: any) {
-    res.status(500).json({ message: error.message });
+    console.error("LOGIN ERROR", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Server error occurred during login'
+    });
   }
 };
 
 export const getMe = async (req: any, res: Response) => {
   if (!checkDbConnection(res)) return;
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const user = await User.findById(req.user.id || req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Handle Daily Login XP
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (user.lastLoginDate !== todayStr) {
+      user.lastLoginDate = todayStr;
+      user.xp = (user.xp || 0) + 5;
+      await user.save();
+    }
+
     res.json(user);
   } catch (error: any) {
-    res.status(500).json({ message: error.message });
+    console.error("GET PROFILE ERROR", error);
+    res.status(500).json({ message: error.message || 'Server error fetching profile' });
   }
 };
 
 export const updateProfile = async (req: any, res: Response) => {
   if (!checkDbConnection(res)) return;
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const user = await User.findById(req.user.id || req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
     if (req.body.name) user.name = req.body.name;
     if (req.body.email) user.email = req.body.email;
@@ -280,7 +363,7 @@ export const getAudienceStats = async (req: any, res: Response) => {
     const helpers = [];
     for (const item of helperAggregate) {
       if (item._id) {
-        const helperUser = await User.findById(item._id).select('name email avatar role');
+        const helperUser = await User.findById(item._id).select('name email avatar role xp level badge');
         if (helperUser) {
           helpers.push({
             _id: helperUser._id,
@@ -288,16 +371,40 @@ export const getAudienceStats = async (req: any, res: Response) => {
             email: helperUser.email,
             avatar: helperUser.avatar,
             role: helperUser.role,
+            xp: helperUser.xp,
+            level: helperUser.level,
+            badge: helperUser.badge,
             count: item.count
           });
         }
       }
     }
 
+    // Top XP Earners from this space
+    const topXPEarners = await User.find({ parentHostId: hostId })
+      .select('name email avatar xp level badge')
+      .sort({ xp: -1 })
+      .limit(10);
+
+    // Most Active Members from this space
+    const mostActive = await User.find({ parentHostId: hostId })
+      .select('name email avatar meetingsAttended xp level badge')
+      .sort({ meetingsAttended: -1 })
+      .limit(10);
+
+    // Top Inviters from this space
+    const topInviters = await User.find({ parentHostId: hostId })
+      .select('name email avatar inviteCount xp level badge')
+      .sort({ inviteCount: -1 })
+      .limit(10);
+
     res.json({
       count: audienceCount,
       users: audienceList,
-      helpers: helpers
+      helpers: helpers,
+      topXPEarners,
+      mostActive,
+      topInviters
     });
   } catch (error: any) {
     console.error('Error in getAudienceStats:', error);
@@ -321,6 +428,237 @@ export const getReferralInfo = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const getCommunityByUsername = async (req: Request, res: Response) => {
+  if (!checkDbConnection(res)) return;
+  const { username } = req.params;
+  try {
+    const host = await User.findOne({ 
+      username: { $regex: new RegExp(`^${username}$`, 'i') },
+      role: { $in: ['admin', 'developer', 'co-admin', 'host'] }
+    }).select('-password');
+
+    if (!host) {
+      return res.status(404).json({ message: 'Community profile not found or user is not a community host.' });
+    }
+
+    const hostId = host._id;
+
+    // Audience Count
+    const totalAudience = await User.countDocuments({ parentHostId: hostId });
+
+    // Live Meeting status check
+    const liveMeeting = await Meeting.findOne({ host: hostId, isLive: true });
+    const isLiveNow = !!liveMeeting;
+
+    // Upcoming meetings
+    const currentIso = new Date().toISOString();
+    const upcomingMeetings = await Meeting.find({
+      host: hostId,
+      isLive: false,
+      startTime: { $gt: currentIso }
+    }).sort({ startTime: 1 }).limit(5);
+
+    // Past meetings
+    const pastMeetings = await Meeting.find({
+      host: hostId,
+      $or: [
+        { isLive: false, startTime: { $lt: currentIso } },
+        { endTime: { $exists: true, $ne: null } }
+      ]
+    }).sort({ startTime: -1 }).limit(5);
+
+    // Announcements (using Broadcasts posted by this host)
+    const announcements = await Broadcast.find({ hostId: hostId }).sort({ createdAt: -1 });
+
+    // Leaderboard
+    const leaderboard = await User.find({ parentHostId: hostId })
+      .select('name avatar xp level badge inviteCount meetingsAttended')
+      .sort({ xp: -1 })
+      .limit(10);
+
+    // Top Helpers (users who invited friends that belong to this host's space)
+    const helperAggregate = await User.aggregate([
+      {
+        $match: {
+          parentHostId: hostId,
+          invitedBy: { $ne: null }
+        }
+      },
+      {
+        $group: {
+          _id: '$invitedBy',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      },
+      {
+        $limit: 10
+      }
+    ]);
+
+    const topHelpers = [];
+    for (const item of helperAggregate) {
+      if (item._id) {
+        const hUser = await User.findById(item._id).select('name avatar role xp level badge');
+        if (hUser) {
+          topHelpers.push({
+            _id: hUser._id,
+            name: hUser.name,
+            avatar: hUser.avatar,
+            role: hUser.role,
+            xp: hUser.xp,
+            level: hUser.level,
+            badge: hUser.badge,
+            count: item.count
+          });
+        }
+      }
+    }
+
+    res.json({
+      host,
+      totalAudience,
+      isLiveNow,
+      liveMeetingCode: liveMeeting ? liveMeeting.code : null,
+      upcomingMeetings,
+      pastMeetings,
+      announcements,
+      leaderboard,
+      topHelpers
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const joinHostCommunity = async (req: any, res: Response) => {
+  if (!checkDbConnection(res)) return;
+  const { username } = req.params;
+  try {
+    const host = await User.findOne({ 
+      username: { $regex: new RegExp(`^${username}$`, 'i') },
+      role: { $in: ['admin', 'developer', 'co-admin', 'host'] }
+    });
+
+    if (!host) {
+      return res.status(404).json({ message: 'Host not found' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user._id.toString() === host._id.toString()) {
+      return res.status(400).json({ message: 'You cannot join your own community.' });
+    }
+
+    if (user.parentHostId && user.parentHostId.toString() === host._id.toString()) {
+      return res.status(400).json({ message: 'You are already a member of this community!' });
+    }
+
+    const oldHostId = user.parentHostId;
+    user.parentHostId = host._id as mongoose.Types.ObjectId;
+    user.referredBy = host._id as mongoose.Types.ObjectId;
+    user.role = 'audience';
+    await user.save();
+
+    if (oldHostId) {
+      await User.findByIdAndUpdate(oldHostId, {
+        $pull: { audience: user._id },
+        $inc: { audienceCount: -1 }
+      });
+    }
+
+    await User.findByIdAndUpdate(host._id, {
+      $addToSet: { audience: user._id },
+      $inc: { audienceCount: 1 }
+    });
+
+    res.json({ message: 'Successfully joined community', parentHostId: host._id });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const addXP = async (req: any, res: Response) => {
+  if (!checkDbConnection(res)) return;
+  const { action, meetingCode } = req.body;
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    let xpToAdd = 0;
+    let limitCheck = false;
+
+    switch (action) {
+      case 'join_meeting':
+        xpToAdd = 10;
+        limitCheck = true;
+        break;
+      case 'attend_30m':
+        xpToAdd = 20;
+        limitCheck = true;
+        break;
+      case 'attend_1h':
+        xpToAdd = 40;
+        limitCheck = true;
+        break;
+      case 'raise_hand':
+        xpToAdd = 2;
+        break;
+      case 'chat_participation':
+        xpToAdd = 1;
+        break;
+      case 'daily_login':
+        xpToAdd = 5;
+        break;
+      default:
+        return res.status(400).json({ message: 'Invalid action' });
+    }
+
+    if (xpToAdd === 0) {
+      return res.json({ xp: user.xp, level: user.level, badge: user.badge });
+    }
+
+    if (limitCheck && meetingCode) {
+      const alreadyAwarded = await AnalyticsLog.exists({
+        event: `xp_${action}` as any,
+        userId: user._id,
+        meetingCode
+      });
+      if (alreadyAwarded) {
+        return res.json({ xp: user.xp, level: user.level, badge: user.badge, message: 'XP already awarded.' });
+      }
+
+      await AnalyticsLog.create({
+        event: `xp_${action}` as any,
+        userId: user._id,
+        meetingCode
+      });
+    }
+
+    if (action === 'join_meeting') {
+      user.meetingsAttended = (user.meetingsAttended || 0) + 1;
+    }
+
+    user.xp = (user.xp || 0) + xpToAdd;
+    await user.save();
+
+    res.json({
+      xp: user.xp,
+      level: user.level,
+      badge: user.badge,
+      meetingsAttended: user.meetingsAttended,
+      xpAdded: xpToAdd
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
   }
 };
 

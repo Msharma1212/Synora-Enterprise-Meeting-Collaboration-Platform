@@ -3,13 +3,14 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from '../hooks/useTranslation';
 import api from '../services/api';
-import { Video, User, Mail, Lock, Loader2, ArrowRight, Tag, ShieldCheck, Sparkles, Calendar, Plus, Users, CheckCircle2 } from 'lucide-react';
+import { Video, User, Mail, Lock, Loader2, ArrowRight, Tag, ShieldCheck, Sparkles, Calendar, Plus, Users, CheckCircle2, Globe } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import { PortalTransition } from '../components/PortalTransition';
 
 export const Register = () => {
-  const { t } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
+  const [isLangOpen, setIsLangOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -121,6 +122,26 @@ export const Register = () => {
   const strAlreadyHaveAccount = t.alreadyHaveAccount || 'Already have an account?';
   const strSignIn = t.signIn || 'Sign In';
 
+  const strReferralCode = t('referralCode', 'Referral Code');
+  const strRole = t('role', 'Role');
+  const strAudience = t('audience', 'Audience');
+  const strHost = t('host', 'Host');
+  const strDeveloper = t('developer', 'Developer');
+  const strCancel = t('cancel', 'Cancel');
+  const strSave = t('save', 'Save');
+  const strCopyLink = t('copyLink', 'Copy Link');
+  
+  const strConnectMeet = t('connectMeetCollab', 'Connect, Meet & Collab with High Fidelity.');
+  const strLiveWebinar = t('liveWebinarSession', 'Live Webinar Session');
+  const strSarahConnor = t('sarahConnor', 'Sarah Connor');
+  const strRaised = t('raisedHandText', '✋ Hand Raised');
+  const strMuted = t('muted', 'MUTED');
+  const strAlexSharing = t('alexIsSharing', 'Alex is screen sharing...');
+  const strAuthSuccess = t('authorizedSuccessfully', 'Authorized Successfully');
+  const strSecureAirspace = t('enteringSecureCollaborativeAirspace', 'Entering secure collaborative airspace...');
+  const strEncrypted = t('endToEndEncrypted', 'Full End-to-End Encrypted Tunneling');
+  const strDevCredits = t('developerCredits', 'Developed by Mayank Sharma');
+
   return (
     <>
       <AnimatePresence>
@@ -138,6 +159,40 @@ export const Register = () => {
         )}
       </AnimatePresence>
       <div className="min-h-screen bg-[#07090e] text-white flex items-center justify-center p-4 md:p-8 overflow-x-hidden relative font-sans">
+      
+      {/* Floating Language Switcher */}
+      <div className="absolute top-6 right-6 z-50">
+        <div className="relative">
+          <button 
+            type="button"
+            onClick={() => setIsLangOpen(!isLangOpen)}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-full text-slate-300 hover:text-white transition-all text-xs font-bold font-mono tracking-wider backdrop-blur-md cursor-pointer"
+          >
+            <Globe className="w-3.5 h-3.5 text-slate-400" />
+            <span>{language}</span>
+          </button>
+          
+          {isLangOpen && (
+            <div className="absolute right-0 mt-2 w-44 bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-lg">
+              {['English (US)', 'Hindi (India)', 'Spanish (ES)', 'French (FR)', 'Arabic (AR)'].map(lang => (
+                <button 
+                  key={lang}
+                  type="button"
+                  onClick={() => {
+                    setLanguage(lang);
+                    setIsLangOpen(false);
+                    toast.success(`Language: ${lang}`);
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/60 text-slate-400 hover:text-white transition-colors text-xs text-left"
+                >
+                  <span>{lang}</span>
+                  {language === lang && <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
       
       {/* 1. Animated mesh gradient background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -170,7 +225,7 @@ export const Register = () => {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-5xl font-extrabold tracking-tight font-display bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400 leading-[1.1]"
             >
-              Setup Workspace in <br />Seconds. Secure Forever.
+              {t('setupWorkspace', 'Setup Workspace in Seconds. Secure Forever.')}
             </motion.h1>
             
             <motion.p 
@@ -194,10 +249,10 @@ export const Register = () => {
             <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-2xl border border-white/5">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-orange-500" />
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Upcoming Collaboration Events</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">{t('upcomingCollaborationEvents', 'Upcoming Collaboration Events')}</span>
               </div>
               <button className="p-1 px-2.5 bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 text-orange-400 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center gap-1 transition-all">
-                <Plus className="w-2.5 h-2.5" /> New Schedule
+                <Plus className="w-2.5 h-2.5" /> {t('newSchedule', 'New Schedule')}
               </button>
             </div>
 
@@ -211,8 +266,8 @@ export const Register = () => {
                     MT
                   </div>
                   <div>
-                    <h5 className="text-[11px] font-bold text-white tracking-tight">Marketing Sync & Sprint Planning</h5>
-                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Today at 18:30 • Space Alpha</p>
+                    <h5 className="text-[11px] font-bold text-white tracking-tight">{t('marketingSyncTitle', 'Marketing Sync & Sprint Planning')}</h5>
+                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t('marketingSyncSubtitle', 'Today at 18:30 • Space Alpha')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -220,7 +275,7 @@ export const Register = () => {
                     <div className="w-5 h-5 bg-blue-600 rounded-full border border-slate-900 text-[6px] font-bold flex items-center justify-center">MS</div>
                     <div className="w-5 h-5 bg-emerald-600 rounded-full border border-slate-900 text-[6px] font-bold flex items-center justify-center">SC</div>
                   </div>
-                  <span className="text-[8px] font-black uppercase text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/10">Join</span>
+                  <span className="text-[8px] font-black uppercase text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/10">{t.join}</span>
                 </div>
               </div>
 
@@ -231,8 +286,8 @@ export const Register = () => {
                     PD
                   </div>
                   <div>
-                    <h5 className="text-[11px] font-bold text-white tracking-tight">Product Design Workshop</h5>
-                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Tomorrow at 10:00 • Virtual Room X</p>
+                    <h5 className="text-[11px] font-bold text-white tracking-tight">{t('productDesignWorkshopTitle', 'Product Design Workshop')}</h5>
+                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t('productDesignWorkshopSubtitle', 'Tomorrow at 10:00 • Virtual Room X')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -240,7 +295,7 @@ export const Register = () => {
                     <div className="w-5 h-5 bg-indigo-600 rounded-full border border-slate-900 text-[6px] font-bold flex items-center justify-center">AM</div>
                     <div className="w-5 h-5 bg-pink-600 rounded-full border border-slate-900 text-[6px] font-bold flex items-center justify-center">K</div>
                   </div>
-                  <span className="text-[8px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full border border-white/5">Pending</span>
+                  <span className="text-[8px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full border border-white/5">{t.pending}</span>
                 </div>
               </div>
 
@@ -248,8 +303,8 @@ export const Register = () => {
 
             {/* Micro details bar */}
             <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-2xl border border-white/5 text-[8px] font-bold text-slate-500">
-              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-orange-400" /> Active Users: 142 Team Space</span>
-              <span>All systems fully operational 99.9% uptime</span>
+              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-orange-400" /> {t('activeUsersTeamSpace', 'Active Users: 142 Team Space')}</span>
+              <span>{t('systemsOperational', 'All systems fully operational 99.9% uptime')}</span>
             </div>
           </motion.div>
         </div>
@@ -267,7 +322,7 @@ export const Register = () => {
                 </div>
                 <div>
                   <h2 className="text-3xl font-extrabold tracking-tighter uppercase font-display bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">{strJoinZMeet}</h2>
-                  <p className="text-[9px] font-black uppercase text-orange-500 tracking-[0.2em]">REGISTER</p>
+                  <p className="text-[9px] font-black uppercase text-orange-500 tracking-[0.2em]">{t.register.toUpperCase()}</p>
                 </div>
               </Link>
             </div>
@@ -293,9 +348,9 @@ export const Register = () => {
                     <Sparkles className="w-4.5 h-4.5 text-orange-400 animate-pulse" />
                   </div>
                   <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-orange-500 leading-none mb-1">EXCLUSIVE COMMUNITY INVITE</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-orange-500 leading-none mb-1">{t('exclusiveCommunityInvite', 'EXCLUSIVE COMMUNITY INVITE')}</p>
                     <h4 className="text-xs font-bold text-slate-100 tracking-tight">
-                      Joining <span className="text-orange-400 font-extrabold">{hostCommunityName}</span>'s Community
+                      {t('joiningLabel', 'Joining')} <span className="text-orange-400 font-extrabold">{hostCommunityName}</span>{t('communitySuffix', "'s Community")}
                     </h4>
                   </div>
                 </motion.div>
@@ -339,8 +394,8 @@ export const Register = () => {
                       <CheckCircle2 className="w-8 h-8 animate-pulse" />
                     </motion.div>
                     <div className="space-y-1">
-                      <h4 className="text-xl font-black uppercase tracking-tight text-white font-display">Account Registered</h4>
-                      <p className="text-xs text-slate-400 font-medium">Preparing your secure workspace vault...</p>
+                      <h4 className="text-xl font-black uppercase tracking-tight text-white font-display">{strAuthSuccess}</h4>
+                      <p className="text-xs text-slate-400 font-medium">{strSecureAirspace}</p>
                     </div>
                   </motion.div>
                 ) : (
@@ -448,7 +503,7 @@ export const Register = () => {
                           focusedInput === 'referral' ? 'text-orange-400' : 'text-slate-500'
                         }`}
                       >
-                        Referral Code (Optional)
+                        {t('referralCodeOptional', 'Referral Code (Optional)')}
                       </label>
                       <div className="relative group/input">
                         <div className={`absolute left-4 top-1/2 -translate-y-1/2 rounded-linear transition-colors duration-300 ${
@@ -508,12 +563,12 @@ export const Register = () => {
             {/* Subtle premium security certification info badge */}
             <div className="flex items-center justify-center gap-2 text-[10px] font-black text-slate-600 uppercase tracking-widest select-none bg-slate-950/20 p-2.5 rounded-2xl border border-white/[0.03]">
               <ShieldCheck className="w-4 h-4 text-orange-500/60" />
-              <span>Full End-to-End Encrypted Tunneling</span>
+              <span>{strEncrypted}</span>
             </div>
 
             {/* Developer Credits */}
             <div className="text-center opacity-30 select-none">
-              <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">Developed by Mayank Sharma</p>
+              <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">{strDevCredits}</p>
             </div>
             
           </div>
