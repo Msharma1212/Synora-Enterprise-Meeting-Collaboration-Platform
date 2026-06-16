@@ -148,3 +148,13 @@ npm run build
 
 ---
 
+# 👨‍💻 Author
+
+**Mayank Sharma**
+
+GitHub:
+https://github.com/Msharma1212
+
+---
+
+
