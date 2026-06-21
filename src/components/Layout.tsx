@@ -18,6 +18,7 @@ import {
 import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
 import { DebugPanel } from './DebugPanel';
+import { NotificationCenter } from './NotificationCenter';
 
 const SidebarItem = ({ icon: Icon, label, href, active }: any) => (
   <Link
@@ -381,6 +382,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 )}></div>
                 <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{socketStatus}</span>
               </div>
+              
+              <NotificationCenter />
+
               <Link to="/settings" className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-white text-base md:text-lg shadow-lg shadow-blue-600/20 ring-2 ring-white/5 shrink-0 transition-transform active:scale-95 hover:scale-105">
                 {user?.name?.charAt(0).toUpperCase() || '?'}
               </Link>

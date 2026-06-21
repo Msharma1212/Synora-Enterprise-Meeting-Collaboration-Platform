@@ -5,6 +5,7 @@ import Meeting from '../models/Meeting';
 import Broadcast from '../models/Broadcast';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import { sendNotification } from '../utils/notificationHelper';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
@@ -95,6 +96,20 @@ export const registerUser = async (req: Request, res: Response) => {
         $addToSet: { audience: user._id },
         $inc: { audienceCount: 1 }
       });
+
+      // Send join notification
+      try {
+        sendNotification(req.app, {
+          userId: referredById.toString(),
+          category: 'Community',
+          icon: '👥',
+          title: 'Referral Joined!',
+          description: `${user.name} joined using your referral code!`,
+          link: '/community'
+        });
+      } catch (refErr) {
+        console.error("Referral join notification error:", refErr);
+      }
     }
 
     if (invitedById) {
@@ -105,9 +120,20 @@ export const registerUser = async (req: Request, res: Response) => {
       // Save to trigger level/badge recalculation on pre-save
       try {
         const inviter = await User.findById(invitedById);
-        if (inviter) await inviter.save();
+        if (inviter) {
+          await inviter.save();
+          // Dispatch beautiful reward notification
+          sendNotification(req.app, {
+            userId: inviter._id.toString(),
+            category: 'Rewards',
+            icon: '🎉',
+            title: 'You earned 50 XP!',
+            description: `${user.name} joined the community using your invite code!`,
+            link: '/community'
+          });
+        }
       } catch (err) {
-        console.error("Failed to rerun inviter save pre-save hook:", err);
+        console.error("Failed to rerun inviter save pre-save hook & notifications:", err);
       }
     }
 
@@ -580,6 +606,20 @@ export const joinHostCommunity = async (req: any, res: Response) => {
       $inc: { audienceCount: 1 }
     });
 
+    // Send notification to the host of the community
+    try {
+      sendNotification(req.app, {
+        userId: host._id.toString(),
+        category: 'Community',
+        icon: '👥',
+        title: 'New community member!',
+        description: `${user.name} joined your community.`,
+        link: '/community'
+      });
+    } catch (nErr) {
+      console.error("Community joined notification error:", nErr);
+    }
+
     res.json({ message: 'Successfully joined community', parentHostId: host._id });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
@@ -649,6 +689,20 @@ export const addXP = async (req: any, res: Response) => {
 
     user.xp = (user.xp || 0) + xpToAdd;
     await user.save();
+
+    // Trigger Notification for earning XP
+    try {
+      sendNotification(req.app, {
+        userId: user._id.toString(),
+        category: 'Rewards',
+        icon: '🎉',
+        title: 'XP Earned!',
+        description: `You earned ${xpToAdd} XP for ${action.replace('_', ' ')}.`,
+        link: '/community'
+      });
+    } catch (xpNotifyErr) {
+      console.error("XP notification integration error:", xpNotifyErr);
+    }
 
     res.json({
       xp: user.xp,

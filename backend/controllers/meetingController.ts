@@ -7,6 +7,7 @@ import User from '../models/User';
 import { v4 as uuidv4 } from 'uuid';
 import mongoose from 'mongoose';
 import { getMeetingSummary, getChatCompletion } from '../lib/gemini';
+import { sendNotification } from '../utils/notificationHelper';
 
 const checkDbConnection = (res: Response) => {
   if (mongoose.connection.readyState !== 1) {
@@ -61,6 +62,16 @@ export const createMeeting = async (req: any, res: Response) => {
       
       if (hostDoc && hostDoc.audience && hostDoc.audience.length > 0) {
         hostDoc.audience.forEach((memberId: any) => {
+          // Persist and push beautiful notification
+          sendNotification(req.app, {
+            userId: memberId.toString(),
+            category: 'Meetings',
+            icon: '🔴',
+            title: `${req.user.name} started a live meeting`,
+            description: `Join now: ${meeting.title}`,
+            link: `/meeting/${meeting.code}`
+          });
+
           const memberSockets = userSockets[memberId.toString()];
           if (memberSockets && memberSockets.length > 0) {
             memberSockets.forEach((sid: string) => {
@@ -124,6 +135,36 @@ export const scheduleMeeting = async (req: any, res: Response) => {
         scheduledAt: startTime,
         expiresAt: new Date(scheduledTime.getTime() + 4 * 60 * 60000) // 4 hours after start
       });
+    }
+
+    // Persist scheduled notifications
+    try {
+      // 1. Notify host
+      sendNotification(req.app, {
+        userId: req.user._id.toString(),
+        category: 'Meetings',
+        icon: '📢',
+        title: 'Your meeting has been scheduled successfully',
+        description: `Your meeting "${meeting.title || 'Scheduled Meeting'}" is now scheduled.`,
+        link: '/history'
+      });
+
+      // 2. Notify audience of host
+      const hostDoc = await User.findById(req.user._id);
+      if (hostDoc && hostDoc.audience && hostDoc.audience.length > 0) {
+        hostDoc.audience.forEach((memberId: any) => {
+          sendNotification(req.app, {
+            userId: memberId.toString(),
+            category: 'Meetings',
+            icon: '📢',
+            title: `New meeting scheduled by ${req.user.name}`,
+            description: `Meeting "${meeting.title || 'Scheduled Meeting'}" scheduled at ${new Date(startTime || Date.now()).toLocaleString()}`,
+            link: '/history'
+          });
+        });
+      }
+    } catch (schedErr) {
+      console.error("Scheduled meeting notification error:", schedErr);
     }
 
     res.status(201).json(meeting);
@@ -296,6 +337,29 @@ export const deleteMeeting = async (req: any, res: Response) => {
 
     // Delete associated messages recorded under this meeting
     await Message.deleteMany({ meetingId: meeting._id });
+
+    // Notify participants and audience
+    try {
+      const title = meeting.title || 'Scheduled Meeting';
+      const participantsToNotify = meeting.participants || [];
+      const uniques = Array.from(new Set([
+        ...participantsToNotify.map((p: any) => p.toString()),
+        meeting.host.toString()
+      ])).filter(id => id !== req.user._id.toString()); // Don't notify the person who deleted it
+
+      uniques.forEach((memberId: string) => {
+        sendNotification(req.app, {
+          userId: memberId,
+          category: 'Meetings',
+          icon: '🚫',
+          title: 'Meeting Cancelled',
+          description: `The meeting "${title}" has been cancelled.`,
+          link: '/history'
+        });
+      });
+    } catch (notifyErr) {
+      console.error("Meeting cancellation notification error:", notifyErr);
+    }
 
     await meeting.deleteOne();
     res.json({ message: 'Meeting removed' });

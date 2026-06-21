@@ -3,6 +3,7 @@ import User from '../models/User';
 import Meeting from '../models/Meeting';
 import GlobalSetting from '../models/GlobalSetting';
 import AnalyticsLog from '../models/AnalyticsLog';
+import { sendNotification } from '../utils/notificationHelper';
 
 export const getGlobalSettings = async (req: Request, res: Response) => {
   try {
@@ -294,6 +295,20 @@ export const updateUserRole = async (req: Request, res: Response) => {
     } else {
       user.role = role;
       await user.save();
+    }
+
+    // Dispatch system notification to target user about role update
+    try {
+      sendNotification(req.app, {
+        userId: user._id.toString(),
+        category: 'System',
+        icon: '✨',
+        title: 'Role Updated',
+        description: `Your application role has been updated to ${role}.`,
+        link: '/settings'
+      });
+    } catch (roleNotifyErr) {
+      console.error("Role assignment notification error:", roleNotifyErr);
     }
     
     // Refresh admin stats

@@ -23,6 +23,7 @@ import authRoutes from "./backend/routes/authRoutes";
 import meetingRoutes from "./backend/routes/meetingRoutes";
 import broadcastRoutes from "./backend/routes/broadcastRoutes";
 import adminRoutes from "./backend/routes/adminRoutes";
+import notificationRoutes from "./backend/routes/notificationRoutes";
 
 async function startServer() {
   const app = express();
@@ -75,6 +76,7 @@ async function startServer() {
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/broadcasts", broadcastRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/notifications", notificationRoutes);
 
   // Auto-cleanup for old meetings (> 7 days) and expired broadcasts
   setInterval(async () => {

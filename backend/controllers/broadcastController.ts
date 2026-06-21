@@ -3,6 +3,7 @@ import Broadcast from '../models/Broadcast';
 import Meeting from '../models/Meeting';
 import { v4 as uuidv4 } from 'uuid';
 import mongoose from 'mongoose';
+import { broadcastNotification } from '../utils/notificationHelper';
 
 const checkDbConnection = (res: Response) => {
   if (mongoose.connection.readyState !== 1) {
@@ -69,6 +70,20 @@ export const createBroadcast = async (req: any, res: Response) => {
       expiresAt
     });
     console.log(`[Broadcast] Created broadcast "${title}" with meeting code: ${finalCode}`);
+
+    // Broadcast live notifications to all users
+    try {
+      broadcastNotification(req.app, {
+        category: 'Announcements',
+        icon: '📢',
+        title: 'New Broadcast Alert!',
+        description: `${req.user.name} posted: ${title}`,
+        link: `/meeting/${finalCode}`
+      });
+    } catch (bcNotifyErr) {
+      console.error("Broadcast notification integration error:", bcNotifyErr);
+    }
+
     res.status(201).json(broadcast);
   } catch (error: any) {
     console.error('[Broadcast] Error creating broadcast:', error);

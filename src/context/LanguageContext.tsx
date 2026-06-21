@@ -103,7 +103,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     'Hindi (India)': 'hi-IN',
     'Spanish (ES)': 'es-ES',
     'French (FR)': 'fr-FR',
-    'Arabic (AR)': 'ar-AE'
+    'Arabic (AR)': 'ar-AE',
+    'বাংলা': 'bn-BD'
   };
 
   const localeCode = localeMap[language] || 'en-US';
