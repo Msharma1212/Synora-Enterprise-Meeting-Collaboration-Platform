@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 Z Meet
+# 🚀 Synora
 ### Modern Real-Time Video Conferencing Platform
 
 Multi-user video meetings with role-based access control, screen sharing, live chat, audience management, and multilingual support.
