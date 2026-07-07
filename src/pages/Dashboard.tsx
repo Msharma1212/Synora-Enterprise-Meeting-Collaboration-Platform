@@ -163,21 +163,21 @@ export const Dashboard = () => {
   };
 
   const shareToWhatsapp = (link: string, name: string) => {
-    const text = `Hey! Join ${name}'s exclusive collaboration community on Z-Meet! Let's meet online.`;
+    const text = `Hey! Join ${name}'s exclusive collaboration community on Synora! Let's meet online.`;
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + " " + link)}`;
     window.open(url, '_blank');
   };
 
   const shareToTelegram = (link: string, name: string) => {
-    const text = `Hey! Join ${name}'s exclusive collaboration community on Z-Meet! Let's meet online.`;
+    const text = `Hey! Join ${name}'s exclusive collaboration community on Synora! Let's meet online.`;
     const url = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
 
   const shareNative = async (link: string, name: string) => {
     const shareData = {
-      title: `Join ${name}'s Z-Meet Workspace Community!`,
-      text: `Hey, join ${name}'s exclusive collaboration community on Z-Meet! Let's meet online.`,
+      title: `Join ${name}'s Synora Workspace Community!`,
+      text: `Hey, join ${name}'s exclusive collaboration community on Synora! Let's meet online.`,
       url: link
     };
     if (navigator.share) {
@@ -526,17 +526,7 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            {/* Link to Sponsor's Public Community Hub if applicable */}
-            {hostMeetingsData.hostUsername ? (
-              <Link
-                to={`/community/${hostMeetingsData.hostUsername}`}
-                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white font-black uppercase tracking-wider text-[10px] rounded-2xl transition-all flex items-center justify-center gap-2 group shrink-0"
-              >
-                <Users className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" />
-                <span>Visit Community Hub</span>
-                <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500 group-hover:translate-x-0.5 transition-transform" />
-              </Link>
-            ) : user?.hostReferralCode ? (
+            {user?.hostReferralCode ? (
               <span className="text-[9px] text-center font-bold text-slate-500 block uppercase tracking-wider">
                 Referred by Sponsor: {user.hostReferralCode}
               </span>
@@ -556,7 +546,7 @@ export const Dashboard = () => {
                   </div>
                   <div>
                     <h4 className="font-black text-white text-sm uppercase tracking-wider">Your Referral Hub</h4>
-                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Earn influence by inviting others to Z-Meet</p>
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Earn influence by inviting others to Synora</p>
                   </div>
                 </div>
 
@@ -720,7 +710,7 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            {/* Box 2: Z-Meet Community Perks */}
+            {/* Box 2: Synora Community Perks */}
             <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-4">
@@ -728,7 +718,7 @@ export const Dashboard = () => {
                     <Shield className="w-5 h-5 text-purple-400" />
                   </div>
                   <div>
-                    <h4 className="font-black text-white text-sm uppercase tracking-wider">Community Hub Perks</h4>
+                    <h4 className="font-black text-white text-sm uppercase tracking-wider">Workspace Perks</h4>
                     <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Your space features</p>
                   </div>
                 </div>
@@ -1317,14 +1307,14 @@ export const Dashboard = () => {
                   <p className="text-[11px] text-slate-400 uppercase mt-1 font-bold">Unable to load invite information</p>
                 </div>
                 <p className="text-[9px] text-slate-500 font-mono tracking-normal leading-normal max-w-[280px] mx-auto">
-                  Failed to fetch community details. Please try again or check your account sponsorship if you are a community member.
+                  Failed to fetch workspace details. Please try again or check your account sponsorship if you are a workspace member.
                 </p>
               </div>
             ) : (
               <div className="space-y-6">
                 <div>
                   <p className="text-xs text-slate-400 font-medium font-sans">
-                    Help grow <span className="text-orange-400 font-extrabold">{inviteHostData.hostName || 'your'}</span>'s Community
+                    Help grow <span className="text-orange-400 font-extrabold">{inviteHostData.hostName || 'your'}</span>'s Space
                   </p>
                 </div>
 
