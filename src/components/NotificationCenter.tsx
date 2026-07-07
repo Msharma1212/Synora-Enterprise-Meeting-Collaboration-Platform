@@ -20,7 +20,7 @@ import { useTranslation } from '../hooks/useTranslation';
 
 interface NotificationItem {
   _id: string;
-  category: 'Meetings' | 'Community' | 'Announcements' | 'Rewards' | 'System' | 'Messages';
+  category: 'Meetings' | 'Announcements' | 'Rewards' | 'System' | 'Messages';
   icon: string;
   title: string;
   description: string;
@@ -36,7 +36,7 @@ export const NotificationCenter: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('zmeet_notif_sound') !== 'false';
+    return localStorage.getItem('synora_notif_sound') !== 'false';
   });
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [isNewArrival, setIsNewArrival] = useState(false);
@@ -137,7 +137,7 @@ export const NotificationCenter: React.FC = () => {
   const toggleSound = () => {
     const newVal = !soundEnabled;
     setSoundEnabled(newVal);
-    localStorage.setItem('zmeet_notif_sound', String(newVal));
+    localStorage.setItem('synora_notif_sound', String(newVal));
   };
 
   // Actions
@@ -220,7 +220,7 @@ export const NotificationCenter: React.FC = () => {
     return n.category === activeCategory;
   });
 
-  const categories = ['All', 'Meetings', 'Community', 'Announcements', 'Rewards', 'System', 'Messages'];
+  const categories = ['All', 'Meetings', 'Announcements', 'Rewards', 'System', 'Messages'];
 
   return (
     <div className="relative inline-block">
