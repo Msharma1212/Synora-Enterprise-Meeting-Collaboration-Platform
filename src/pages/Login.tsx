@@ -74,7 +74,7 @@ export const Login = () => {
   const strPassword = t.password || 'Password';
   const strSignIn = t.signIn || 'Sign In';
   const strCreateAccount = t.createAccount || 'Create Account';
-  const strNewToZMeet = t.newToZMeet || 'New to Z-Meet?';
+  const strNewToSynora = t.newToSynora || 'New to Synora?';
   const strStreamlinedVideo = t.streamlinedVideo || 'Next-generation video collaboration and real-time screen sharing platform';
 
   const strConnectMeet = t('connectMeetCollab', 'Connect, Meet & Collab with High Fidelity.');
@@ -162,7 +162,7 @@ export const Login = () => {
               className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-black uppercase tracking-widest"
             >
               <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-              Z-Meet Premium Enterprise v2.0
+              Synora Premium Enterprise v2.0
             </motion.div>
             
             <motion.h1 
@@ -272,7 +272,7 @@ export const Login = () => {
                   <Video className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-extrabold tracking-tighter uppercase font-display bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">Z-MEET</h2>
+                  <h2 className="text-3xl font-extrabold tracking-tighter uppercase font-display bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">SYNORA</h2>
                   <p className="text-[9px] font-black uppercase text-blue-500 tracking-[0.2em]">{t.streamlinedVideo ? 'PRO' : 'Videoconferencing'}</p>
                 </div>
               </Link>
@@ -425,7 +425,7 @@ export const Login = () => {
 
             {/* Bottom Form Switcher info for mobile */}
             <p className="text-center text-slate-500 text-sm font-medium">
-              {strNewToZMeet}{' '}
+              {strNewToSynora}{' '}
               <Link to="/register" className="text-blue-500 hover:text-blue-400 font-extrabold hover:underline transition-all">
                 {strCreateAccount}
               </Link>
