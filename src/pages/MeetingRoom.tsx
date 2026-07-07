@@ -22,6 +22,14 @@ import { useTranslation } from '../hooks/useTranslation';
 import api from '../services/api';
 
 import MediaTester from '../components/MediaTester';
+import { 
+  getOptimizedConstraints, 
+  optimizeSDP, 
+  WebAudioPipeline, 
+  hotSwapTrackOnPeers, 
+  DEFAULT_MEDIA_SETTINGS, 
+  AdvancedAudioSettings 
+} from '../lib/mediaService';
 
 interface Meeting {
   _id: string;
@@ -433,6 +441,13 @@ export const MeetingRoomComponent = () => {
   
   const exitMeeting = () => {
     exitedRef.current = true;
+    
+    // Release active WebAudio pipeline
+    if (pipelineRef.current) {
+      pipelineRef.current.cleanup();
+      pipelineRef.current = null;
+    }
+
     // Release all media resources instantly
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
@@ -496,6 +511,12 @@ export const MeetingRoomComponent = () => {
       exitedRef.current = true;
       window.removeEventListener('beforeunload', handleBeforeUnload);
       
+      // Cleanup WebAudio pipeline
+      if (pipelineRef.current) {
+        pipelineRef.current.cleanup();
+        pipelineRef.current = null;
+      }
+      
       // Force stop all tracks globally on unmount to release camera immediately
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => {
@@ -531,10 +552,154 @@ export const MeetingRoomComponent = () => {
   const peersRef = useRef<any[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  
+  const pipelineRef = useRef<WebAudioPipeline | null>(null);
+  const processedStreamRef = useRef<MediaStream | null>(null);
+  const [activeMicId, setActiveMicId] = useState('');
+  const [activeCameraId, setActiveCameraId] = useState('');
+  const [activeSpeakerId, setActiveSpeakerId] = useState('');
 
   // Safe variables for finding exact issues as requested
   const participants = participantsList;
   const localStream = streamRef.current;
+
+  // Update or build processed Web Audio stream to send over WebRTC
+  const updateProcessedStream = (rawStream: MediaStream) => {
+    if (!rawStream) {
+      processedStreamRef.current = null;
+      return null;
+    }
+    
+    const savedSettings = localStorage.getItem('synora_media_settings');
+    const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+    
+    if (pipelineRef.current) {
+      pipelineRef.current.cleanup();
+    }
+    
+    // Instantiate pipeline on the raw mic tracks
+    pipelineRef.current = new WebAudioPipeline(rawStream, mediaSettings);
+    
+    pipelineRef.current.onFeedbackDetected = () => {
+      toast.error("Feedback loop detected! Muting live loopback or lowering gain.", { id: 'meeting-feedback' });
+    };
+    
+    const sendingStream = new MediaStream();
+    // Add raw video tracks
+    rawStream.getVideoTracks().forEach(t => sendingStream.addTrack(t));
+    
+    // Add processed audio track
+    const processedTrack = pipelineRef.current.getProcessedTrack();
+    if (processedTrack) {
+      sendingStream.addTrack(processedTrack);
+    } else if (rawStream.getAudioTracks().length > 0) {
+      sendingStream.addTrack(rawStream.getAudioTracks()[0]);
+    }
+    
+    processedStreamRef.current = sendingStream;
+    return sendingStream;
+  };
+
+  const switchMicrophone = async (newMicId: string) => {
+    if (!streamRef.current) return;
+    try {
+      setActiveMicId(newMicId);
+      
+      // Stop existing audio tracks
+      streamRef.current.getAudioTracks().forEach(t => t.stop());
+      
+      const savedSettings = localStorage.getItem('synora_media_settings');
+      const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+      const activeSettings = { ...mediaSettings, selectedMic: newMicId };
+      localStorage.setItem('synora_media_settings', JSON.stringify(activeSettings));
+
+      const constraints = getOptimizedConstraints(newMicId, undefined, activeSettings);
+      const tempStream = await navigator.mediaDevices.getUserMedia({ audio: constraints.audio });
+      const newRawTrack = tempStream.getAudioTracks()[0];
+      
+      streamRef.current.getAudioTracks().forEach(t => streamRef.current?.removeTrack(t));
+      streamRef.current.addTrack(newRawTrack);
+      
+      // Update pipeline
+      if (pipelineRef.current) {
+        pipelineRef.current.cleanup();
+      }
+      pipelineRef.current = new WebAudioPipeline(streamRef.current, activeSettings);
+      
+      const processedTrack = pipelineRef.current.getProcessedTrack();
+      if (processedTrack) {
+        // Hot-swap on active peer senders!
+        await hotSwapTrackOnPeers(peersRef.current, 'audio', processedTrack);
+      }
+      
+      toast.success("Microphone switched smoothly");
+    } catch (err) {
+      console.error("Microphone switch failed:", err);
+      toast.error("Failed to switch microphone");
+    }
+  };
+
+  const switchCamera = async (newCamId: string) => {
+    if (!streamRef.current) return;
+    try {
+      setActiveCameraId(newCamId);
+      
+      streamRef.current.getVideoTracks().forEach(t => t.stop());
+      
+      const savedSettings = localStorage.getItem('synora_media_settings');
+      const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+      const activeSettings = { ...mediaSettings, selectedCamera: newCamId };
+      localStorage.setItem('synora_media_settings', JSON.stringify(activeSettings));
+
+      const constraints = getOptimizedConstraints(undefined, newCamId, activeSettings);
+      const tempStream = await navigator.mediaDevices.getUserMedia({ video: constraints.video });
+      const newVideoTrack = tempStream.getVideoTracks()[0];
+      
+      streamRef.current.getVideoTracks().forEach(t => streamRef.current?.removeTrack(t));
+      streamRef.current.addTrack(newVideoTrack);
+      
+      if (userVideo.current) {
+        userVideo.current.srcObject = streamRef.current;
+      }
+      
+      // Hot-swap on active peer senders!
+      await hotSwapTrackOnPeers(peersRef.current, 'video', newVideoTrack);
+      toast.success("Camera switched smoothly");
+    } catch (err) {
+      console.error("Camera switch failed:", err);
+      toast.error("Failed to switch camera");
+    }
+  };
+
+  const switchSpeaker = async (newSpeakerId: string) => {
+    setActiveSpeakerId(newSpeakerId);
+    
+    const savedSettings = localStorage.getItem('synora_media_settings');
+    const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+    localStorage.setItem('synora_media_settings', JSON.stringify({ ...mediaSettings, selectedSpeaker: newSpeakerId }));
+
+    const mediaElements = document.querySelectorAll('video, audio');
+    mediaElements.forEach((el: any) => {
+      if (el.setSinkId) {
+        el.setSinkId(newSpeakerId).catch((err: any) => {
+          console.error("Failed to set sink ID on element:", err);
+        });
+      }
+    });
+    toast.success("Speaker output routed cleanly");
+  };
+
+  const handleDevicesChanged = (micId: string, camId: string, speakerId: string) => {
+    if (micId && micId !== activeMicId) {
+      switchMicrophone(micId);
+    }
+    if (camId && camId !== activeCameraId) {
+      switchCamera(camId);
+    }
+    if (speakerId && speakerId !== activeSpeakerId) {
+      switchSpeaker(speakerId);
+    }
+  };
 
   // Safe participants List setter to prevent Duplicate / Undefined users
   const setParticipants = (updater: any) => {
@@ -594,20 +759,25 @@ export const MeetingRoomComponent = () => {
           let stream = streamRef.current;
           
           if (!stream) {
-            // Request both audio and video, with graceful fallbacks if hardware doesn't exist/is blocked
+            const savedSettings = localStorage.getItem('synora_media_settings');
+            const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+            
             try {
-              stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+              const constraints = getOptimizedConstraints(mediaSettings.selectedMic, mediaSettings.selectedCamera, mediaSettings);
+              stream = await navigator.mediaDevices.getUserMedia(constraints);
             } catch (err) {
-              console.warn("Lobby dual-permission getUserMedia failed, trying fallbacks", err);
+              console.warn("Lobby optimized getUserMedia failed, trying fallbacks", err);
               try {
-                // Try audio only
-                stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
               } catch (err2) {
                 try {
-                  // Try video only
-                  stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                  stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
                 } catch (err3) {
-                  throw new Error("No camera or microphone access granted");
+                  try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                  } catch (err4) {
+                    throw new Error("No camera or microphone access granted");
+                  }
                 }
               }
             }
@@ -862,7 +1032,14 @@ export const MeetingRoomComponent = () => {
         if (!isMyHand) {
           playSystemSound('hand');
         }
-        setRaisedHands(prev => [...prev, payload.userID, payload.socketId].filter(Boolean));
+        
+        // Secure unique hand raise state by using only a single key per user (userID or socketId)
+        setRaisedHands(prev => {
+          const key = payload.userID || payload.socketId;
+          if (!key) return prev;
+          if (prev.includes(key)) return prev;
+          return [...prev, key];
+        });
         
         const isUserPrivileged = 
           isHost || 
@@ -878,7 +1055,10 @@ export const MeetingRoomComponent = () => {
           toast(`${userName} raised their hand`, { icon: "✋" });
         }
       } else {
-        setRaisedHands(prev => prev.filter(id => id !== payload.userID && id !== payload.socketId));
+        setRaisedHands(prev => {
+          const key = payload.userID || payload.socketId;
+          return prev.filter(id => id !== key);
+        });
       }
     });
 
@@ -896,11 +1076,25 @@ export const MeetingRoomComponent = () => {
 
     const handleForceMute = () => {
       setMicLocked(true);
-      if (streamRef.current) {
-        const audioTrack = streamRef.current.getAudioTracks()[0];
-        if (audioTrack) audioTrack.enabled = false;
-      }
       setMicActive(false);
+
+      // 1. Mute RAW tracks
+      if (streamRef.current) {
+        streamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = false;
+        });
+      }
+      // 2. Mute PROCESSED tracks sent to peers
+      if (processedStreamRef.current) {
+        processedStreamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = false;
+        });
+      }
+      // 3. Set Web Audio Pipeline gain to zero
+      if (pipelineRef.current) {
+        pipelineRef.current.updateSettings({ ...DEFAULT_MEDIA_SETTINGS, micBoost: 0, inputVolume: 0 });
+      }
+
       if (socketRef.current) {
         socketRef.current.emit("user-muted", {
           roomID: code,
@@ -919,11 +1113,29 @@ export const MeetingRoomComponent = () => {
 
     const handleForceUnmute = () => {
       setMicLocked(false);
-      if (streamRef.current) {
-        const audioTrack = streamRef.current.getAudioTracks()[0];
-        if (audioTrack) audioTrack.enabled = true;
-      }
       setMicActive(true);
+
+      // 1. Unmute RAW tracks
+      if (streamRef.current) {
+        streamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
+      }
+      // 2. Unmute PROCESSED tracks sent to peers
+      if (processedStreamRef.current) {
+        processedStreamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
+      }
+      // 3. Restore Web Audio Pipeline gain
+      if (pipelineRef.current) {
+        const savedSettings = localStorage.getItem('synora_media_settings');
+        const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+        const boost = mediaSettings.micBoost ?? 1.0;
+        const vol = mediaSettings.inputVolume ?? 1.0;
+        pipelineRef.current.updateSettings({ ...mediaSettings, micBoost: boost, inputVolume: vol });
+      }
+
       if (socketRef.current) {
         socketRef.current.emit("user-unmuted", {
           roomID: code,
@@ -1019,12 +1231,8 @@ export const MeetingRoomComponent = () => {
     };
 
     socket.on("force-mute", handleForceMute);
-    socket.on("force-mute-user", handleForceMute);
     socket.on("force-unmute", handleForceUnmute);
-    socket.on("force-unmute-user", handleForceUnmute);
-    socket.on("force-disable-camera", handleForceCameraOff);
     socket.on("force-camera-off", handleForceCameraOff);
-    socket.on("force-enable-camera", handleForceCameraOn);
     socket.on("force-camera-on", handleForceCameraOn);
 
     socket.on("force-remove", () => {
@@ -1208,20 +1416,39 @@ export const MeetingRoomComponent = () => {
         let stream = streamRef.current;
         if (!isSpectator) {
           if (!stream) {
-            // Request both audio and video with graceful fallbacks if hardware doesn't exist/is blocked
+            const savedSettings = localStorage.getItem('synora_media_settings');
+            const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+            
+            // Apply initial states
+            if (mediaSettings.selectedMic) setActiveMicId(mediaSettings.selectedMic);
+            if (mediaSettings.selectedCamera) setActiveCameraId(mediaSettings.selectedCamera);
+            if (mediaSettings.selectedSpeaker) {
+              setActiveSpeakerId(mediaSettings.selectedSpeaker);
+              // Set sink IDs after a short delay to ensure elements are rendered
+              setTimeout(() => {
+                const mediaElements = document.querySelectorAll('video, audio');
+                mediaElements.forEach((el: any) => {
+                  if (el.setSinkId) el.setSinkId(mediaSettings.selectedSpeaker).catch(() => {});
+                });
+              }, 1000);
+            }
+
             try {
-              stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+              const constraints = getOptimizedConstraints(mediaSettings.selectedMic, mediaSettings.selectedCamera, mediaSettings);
+              stream = await navigator.mediaDevices.getUserMedia(constraints);
             } catch (err) {
-              console.warn("Room enter getUserMedia failed, trying fallbacks", err);
+              console.warn("Room enter optimized getUserMedia failed, trying standard fallback", err);
               try {
-                // Try audio only
-                stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
               } catch (err2) {
                 try {
-                  // Try video only
-                  stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                  stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
                 } catch (err3) {
-                  throw new Error("No camera or microphone access granted");
+                  try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                  } catch (err4) {
+                    throw new Error("No camera or microphone access granted");
+                  }
                 }
               }
             }
@@ -1262,7 +1489,8 @@ export const MeetingRoomComponent = () => {
           const peers: any[] = [];
           users.forEach(userID => {
             if (peersRef.current.some(p => p.peerID === userID)) return;
-            const peer = createPeer(userID, socket.id!, stream || new MediaStream());
+            const sendingStream = processedStreamRef.current || (stream ? updateProcessedStream(stream) : null) || new MediaStream();
+            const peer = createPeer(userID, socket.id!, sendingStream);
             if (isScreenSharing && screenStreamRef.current) {
               try {
                 peer.addStream(screenStreamRef.current);
@@ -1287,13 +1515,6 @@ export const MeetingRoomComponent = () => {
           const callerID = payload.callerID || (payload.user && (payload.user.userId || payload.user._id || payload.user.id));
           if (!callerID) return;
 
-          playSystemSound('join');
-          toast.success("Someone joined the meeting", {
-            icon: <UserCircle className="w-5 h-5 text-blue-500" />,
-            position: 'top-right',
-            style: { background: '#151921', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }
-          });
-
           if (payload.user) {
             setParticipants(prev => {
               const uId = payload.user.userId || payload.user._id || payload.user.id;
@@ -1316,7 +1537,16 @@ export const MeetingRoomComponent = () => {
             return;
           }
 
-          const peer = addPeer(payload.signal, callerID, stream || new MediaStream());
+          // ONLY trigger join sound and notification if this is a brand new peer connection!
+          playSystemSound('join');
+          toast.success("Someone joined the meeting", {
+            icon: <UserCircle className="w-5 h-5 text-blue-500" />,
+            position: 'top-right',
+            style: { background: '#151921', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }
+          });
+
+          const sendingStream = processedStreamRef.current || (stream ? updateProcessedStream(stream) : null) || new MediaStream();
+          const peer = addPeer(payload.signal, callerID, sendingStream);
           if (isScreenSharing && screenStreamRef.current) {
             try {
               peer.addStream(screenStreamRef.current);
@@ -1443,10 +1673,14 @@ export const MeetingRoomComponent = () => {
   };
 
   function createPeer(userToSignal: string, callerID: string, stream: MediaStream) {
+    const savedSettings = localStorage.getItem('synora_media_settings');
+    const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+
     const peer = new Peer({
       initiator: true,
       trickle: false,
       stream,
+      sdpTransform: (sdp) => optimizeSDP(sdp, mediaSettings)
     });
 
     peer.on("signal", signal => {
@@ -1457,10 +1691,14 @@ export const MeetingRoomComponent = () => {
   }
 
   function addPeer(incomingSignal: any, callerID: string, stream: MediaStream) {
+    const savedSettings = localStorage.getItem('synora_media_settings');
+    const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+
     const peer = new Peer({
       initiator: false,
       trickle: false,
       stream,
+      sdpTransform: (sdp) => optimizeSDP(sdp, mediaSettings)
     });
 
     peer.on("signal", signal => {
@@ -1482,12 +1720,34 @@ export const MeetingRoomComponent = () => {
     }
     const nextMicActive = !micActive;
     setMicActive(nextMicActive);
+
+    // 1. Mute the RAW audio tracks
     if (streamRef.current) {
-      const audioTrack = streamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = nextMicActive;
+      streamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = nextMicActive;
+      });
+    }
+
+    // 2. Mute the PROCESSED audio tracks sent to peers
+    if (processedStreamRef.current) {
+      processedStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = nextMicActive;
+      });
+    }
+
+    // 3. Set Web Audio Pipeline gain to zero when muted
+    if (pipelineRef.current) {
+      if (nextMicActive) {
+        const savedSettings = localStorage.getItem('synora_media_settings');
+        const mediaSettings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_MEDIA_SETTINGS;
+        const boost = mediaSettings.micBoost ?? 1.0;
+        const vol = mediaSettings.inputVolume ?? 1.0;
+        pipelineRef.current.updateSettings({ ...mediaSettings, micBoost: boost, inputVolume: vol });
+      } else {
+        pipelineRef.current.updateSettings({ ...DEFAULT_MEDIA_SETTINGS, micBoost: 0, inputVolume: 0 });
       }
     }
+
     if (socketRef.current) {
       socketRef.current.emit("media-state-updated", {
         roomID: code,
@@ -1531,32 +1791,12 @@ export const MeetingRoomComponent = () => {
     const newState = !handRaised;
     setHandRaised(newState);
     if (socketRef.current) {
-      if (newState) {
-        socketRef.current.emit("hand-raised", {
-          roomID: code,
-          userId: user?._id || (user as any)?.id,
-          name: user?.name
-        });
-      } else {
-        socketRef.current.emit("hand-lowered", {
-          roomID: code,
-          userId: user?._id || (user as any)?.id
-        });
-      }
-
       socketRef.current.emit("raise-hand", { 
         roomID: code, 
         raised: newState,
         userID: user?._id || (user as any)?.id,
         socketId: socketRef.current.id,
         name: user?.name
-      });
-      socketRef.current.emit("media-state-updated", {
-        roomID: code,
-        userId: user?._id || (user as any)?.id,
-        isMuted: !micActive,
-        cameraEnabled: videoActive,
-        handRaised: newState
       });
     }
     toast.success(newState ? "Hand raised" : "Hand lowered");
@@ -1597,7 +1837,18 @@ export const MeetingRoomComponent = () => {
     }
 
     try {
-      const requestedStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const requestedStream = await navigator.mediaDevices.getDisplayMedia({ 
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: false,
+          autoGainControl: true
+        }
+      });
       if (!isMountedRef.current || exitedRef.current) {
         requestedStream.getTracks().forEach(t => t.stop());
         return;
@@ -1630,15 +1881,21 @@ export const MeetingRoomComponent = () => {
         }
       });
 
+      // Mix screen/system audio into active pipeline if present
+      if (pipelineRef.current && stream.getAudioTracks().length > 0) {
+        pipelineRef.current.attachScreenAudio(stream);
+        toast.success("Presentation started with high-fidelity system audio sharing!");
+      } else {
+        toast.success("Presentation started");
+      }
+
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.onended = () => {
         stopScreenShare();
       };
-      
-      toast.success("Presentation started");
     } catch (err) {
       console.error("Screen share failed", err);
-      toast.error("Screen sharing not supported in this environment.", {
+      toast.error("Screen sharing failed or was canceled.", {
         style: {
           background: '#0f172a',
           color: '#f87171',
@@ -1650,6 +1907,10 @@ export const MeetingRoomComponent = () => {
 
   const stopScreenShare = async () => {
     try {
+      if (pipelineRef.current) {
+        pipelineRef.current.detachScreenAudio();
+      }
+
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(track => track.stop());
         const oldScreenStream = screenStreamRef.current;
@@ -2044,7 +2305,9 @@ export const MeetingRoomComponent = () => {
                     </button>
                   </div>
                   <div className="flex-1 overflow-y-auto">
-                    <MediaTester />
+                    <MediaTester 
+                      onDevicesChanged={handleDevicesChanged} 
+                    />
                   </div>
                 </motion.div>
              </div>
@@ -2449,7 +2712,7 @@ export const MeetingRoomComponent = () => {
              hasMenu
              onMenuClick={() => setShowMicMenu(!showMicMenu)}
              showMenu={showMicMenu}
-             menuContent={<MediaTester filter="audio" />}
+             menuContent={<MediaTester filter="audio" onDevicesChanged={handleDevicesChanged} />}
              disabled={micLocked}
            />
            <ControlButton 
@@ -2460,7 +2723,7 @@ export const MeetingRoomComponent = () => {
              hasMenu
              onMenuClick={() => setShowCameraMenu(!showCameraMenu)}
              showMenu={showCameraMenu}
-             menuContent={<MediaTester filter="video" />}
+             menuContent={<MediaTester filter="video" onDevicesChanged={handleDevicesChanged} />}
              disabled={cameraLocked}
            />
         </div>
