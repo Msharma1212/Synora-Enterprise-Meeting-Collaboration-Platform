@@ -42,7 +42,7 @@ export const getMeetingSummary = async (messages: string[], language: string = "
   }
 
   const prompt = `
-    You are an AI Meeting Assistant for a professional video conferencing app called Z-Meet.
+    You are an AI Meeting Assistant for a professional video conferencing app called Synora.
     Below is a transcript of a meeting chat conversation. 
     Please provide a concise, professional summary of the key points discussed, 
     decisions made, and any action items identified.
