@@ -24,26 +24,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     try {
-      const storedUser = localStorage.getItem('zmeet_user');
+      const storedUser = localStorage.getItem('synora_user');
       if (storedUser && storedUser !== 'undefined') {
         setUser(JSON.parse(storedUser));
       }
     } catch (error) {
       console.error('Failed to parse stored user', error);
-      localStorage.removeItem('zmeet_user');
+      localStorage.removeItem('synora_user');
     } finally {
       setLoading(false);
     }
   }, []);
 
   const login = (userData: User) => {
-    localStorage.setItem('zmeet_user', JSON.stringify(userData));
+    localStorage.setItem('synora_user', JSON.stringify(userData));
     setUser(userData);
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('zmeet_user');
+    localStorage.removeItem('synora_user');
     sessionStorage.removeItem('greeted');
   };
 
