@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
 import AnalyticsLog from '../models/AnalyticsLog';
-import Meeting from '../models/Meeting';
-import Broadcast from '../models/Broadcast';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { sendNotification } from '../utils/notificationHelper';
@@ -101,11 +99,11 @@ export const registerUser = async (req: Request, res: Response) => {
       try {
         sendNotification(req.app, {
           userId: referredById.toString(),
-          category: 'Community',
+          category: 'Rewards',
           icon: '👥',
           title: 'Referral Joined!',
           description: `${user.name} joined using your referral code!`,
-          link: '/community'
+          link: '/dashboard'
         });
       } catch (refErr) {
         console.error("Referral join notification error:", refErr);
@@ -128,8 +126,8 @@ export const registerUser = async (req: Request, res: Response) => {
             category: 'Rewards',
             icon: '🎉',
             title: 'You earned 50 XP!',
-            description: `${user.name} joined the community using your invite code!`,
-            link: '/community'
+            description: `${user.name} joined the platform using your invite code!`,
+            link: '/dashboard'
           });
         }
       } catch (err) {
@@ -457,175 +455,6 @@ export const getReferralInfo = async (req: Request, res: Response) => {
   }
 };
 
-export const getCommunityByUsername = async (req: Request, res: Response) => {
-  if (!checkDbConnection(res)) return;
-  const { username } = req.params;
-  try {
-    const host = await User.findOne({ 
-      username: { $regex: new RegExp(`^${username}$`, 'i') },
-      role: { $in: ['admin', 'developer', 'co-admin', 'host'] }
-    }).select('-password');
-
-    if (!host) {
-      return res.status(404).json({ message: 'Community profile not found or user is not a community host.' });
-    }
-
-    const hostId = host._id;
-
-    // Audience Count
-    const totalAudience = await User.countDocuments({ parentHostId: hostId });
-
-    // Live Meeting status check
-    const liveMeeting = await Meeting.findOne({ host: hostId, isLive: true });
-    const isLiveNow = !!liveMeeting;
-
-    // Upcoming meetings
-    const currentIso = new Date().toISOString();
-    const upcomingMeetings = await Meeting.find({
-      host: hostId,
-      isLive: false,
-      startTime: { $gt: currentIso }
-    }).sort({ startTime: 1 }).limit(5);
-
-    // Past meetings
-    const pastMeetings = await Meeting.find({
-      host: hostId,
-      $or: [
-        { isLive: false, startTime: { $lt: currentIso } },
-        { endTime: { $exists: true, $ne: null } }
-      ]
-    }).sort({ startTime: -1 }).limit(5);
-
-    // Announcements (using Broadcasts posted by this host)
-    const announcements = await Broadcast.find({ hostId: hostId }).sort({ createdAt: -1 });
-
-    // Leaderboard
-    const leaderboard = await User.find({ parentHostId: hostId })
-      .select('name avatar xp level badge inviteCount meetingsAttended')
-      .sort({ xp: -1 })
-      .limit(10);
-
-    // Top Helpers (users who invited friends that belong to this host's space)
-    const helperAggregate = await User.aggregate([
-      {
-        $match: {
-          parentHostId: hostId,
-          invitedBy: { $ne: null }
-        }
-      },
-      {
-        $group: {
-          _id: '$invitedBy',
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $sort: { count: -1 }
-      },
-      {
-        $limit: 10
-      }
-    ]);
-
-    const topHelpers = [];
-    for (const item of helperAggregate) {
-      if (item._id) {
-        const hUser = await User.findById(item._id).select('name avatar role xp level badge');
-        if (hUser) {
-          topHelpers.push({
-            _id: hUser._id,
-            name: hUser.name,
-            avatar: hUser.avatar,
-            role: hUser.role,
-            xp: hUser.xp,
-            level: hUser.level,
-            badge: hUser.badge,
-            count: item.count
-          });
-        }
-      }
-    }
-
-    res.json({
-      host,
-      totalAudience,
-      isLiveNow,
-      liveMeetingCode: liveMeeting ? liveMeeting.code : null,
-      upcomingMeetings,
-      pastMeetings,
-      announcements,
-      leaderboard,
-      topHelpers
-    });
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-export const joinHostCommunity = async (req: any, res: Response) => {
-  if (!checkDbConnection(res)) return;
-  const { username } = req.params;
-  try {
-    const host = await User.findOne({ 
-      username: { $regex: new RegExp(`^${username}$`, 'i') },
-      role: { $in: ['admin', 'developer', 'co-admin', 'host'] }
-    });
-
-    if (!host) {
-      return res.status(404).json({ message: 'Host not found' });
-    }
-
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    if (user._id.toString() === host._id.toString()) {
-      return res.status(400).json({ message: 'You cannot join your own community.' });
-    }
-
-    if (user.parentHostId && user.parentHostId.toString() === host._id.toString()) {
-      return res.status(400).json({ message: 'You are already a member of this community!' });
-    }
-
-    const oldHostId = user.parentHostId;
-    user.parentHostId = host._id as mongoose.Types.ObjectId;
-    user.referredBy = host._id as mongoose.Types.ObjectId;
-    user.role = 'audience';
-    await user.save();
-
-    if (oldHostId) {
-      await User.findByIdAndUpdate(oldHostId, {
-        $pull: { audience: user._id },
-        $inc: { audienceCount: -1 }
-      });
-    }
-
-    await User.findByIdAndUpdate(host._id, {
-      $addToSet: { audience: user._id },
-      $inc: { audienceCount: 1 }
-    });
-
-    // Send notification to the host of the community
-    try {
-      sendNotification(req.app, {
-        userId: host._id.toString(),
-        category: 'Community',
-        icon: '👥',
-        title: 'New community member!',
-        description: `${user.name} joined your community.`,
-        link: '/community'
-      });
-    } catch (nErr) {
-      console.error("Community joined notification error:", nErr);
-    }
-
-    res.json({ message: 'Successfully joined community', parentHostId: host._id });
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
 export const addXP = async (req: any, res: Response) => {
   if (!checkDbConnection(res)) return;
   const { action, meetingCode } = req.body;
@@ -698,7 +527,7 @@ export const addXP = async (req: any, res: Response) => {
         icon: '🎉',
         title: 'XP Earned!',
         description: `You earned ${xpToAdd} XP for ${action.replace('_', ' ')}.`,
-        link: '/community'
+        link: '/dashboard'
       });
     } catch (xpNotifyErr) {
       console.error("XP notification integration error:", xpNotifyErr);

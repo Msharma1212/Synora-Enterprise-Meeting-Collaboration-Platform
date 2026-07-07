@@ -6,8 +6,6 @@ import {
   updateProfile, 
   getAudienceStats, 
   getReferralInfo,
-  getCommunityByUsername,
-  joinHostCommunity,
   addXP
 } from '../controllers/authController';
 import { protect } from '../middleware/authMiddleware';
@@ -21,10 +19,6 @@ router.get('/profile', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.get('/audience', protect, getAudienceStats);
 router.get('/referral-info/:code', getReferralInfo);
-
-// Community profile page & interactions
-router.get('/community/:username', getCommunityByUsername);
-router.post('/community/:username/join', protect, joinHostCommunity);
 
 // XP system endpoint
 router.post('/xp/add', protect, addXP);
