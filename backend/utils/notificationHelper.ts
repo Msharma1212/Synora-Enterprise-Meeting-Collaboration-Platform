@@ -3,7 +3,7 @@ import User from '../models/User';
 
 interface NotificationParams {
   userId: string;
-  category: 'Meetings' | 'Community' | 'Announcements' | 'Rewards' | 'System' | 'Messages';
+  category: 'Meetings' | 'Announcements' | 'Rewards' | 'System' | 'Messages';
   icon: string;
   title: string;
   description: string;
