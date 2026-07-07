@@ -113,7 +113,7 @@ export const Register = () => {
   };
 
   // Safe Fallback locale translations
-  const strJoinZMeet = t.joinZMeet || 'Join Z-Meet';
+  const strJoinSynora = t.joinSynora || 'Join Synora';
   const strCreateProfessionalAccount = t.createProfessionalAccount || 'Create your professional account to unlock high-definition collaboration';
   const strDisplayName = t.displayName || 'Display Name';
   const strEmailAddress = t.emailAddress || 'Email Address';
@@ -321,7 +321,7 @@ export const Register = () => {
                   <Video className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-extrabold tracking-tighter uppercase font-display bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">{strJoinZMeet}</h2>
+                  <h2 className="text-3xl font-extrabold tracking-tighter uppercase font-display bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">{strJoinSynora}</h2>
                   <p className="text-[9px] font-black uppercase text-orange-500 tracking-[0.2em]">{t.register.toUpperCase()}</p>
                 </div>
               </Link>
