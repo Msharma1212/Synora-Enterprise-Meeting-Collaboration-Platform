@@ -20,6 +20,8 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
+import MediaTester from '../components/MediaTester';
+import { DEFAULT_MEDIA_SETTINGS, AdvancedAudioSettings } from '../lib/mediaService';
 
 export const SettingsPage = () => {
   const { user, login } = useAuth();
@@ -44,6 +46,25 @@ export const SettingsPage = () => {
   const [language, setLanguage] = useState(user?.settings?.language || 'English (US)');
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(user?.settings?.voiceEnabled ?? true);
+
+  // Advanced Media Settings State (linked with localStorage)
+  const [mediaSettings, setMediaSettings] = useState<AdvancedAudioSettings>(() => {
+    const saved = localStorage.getItem('synora_media_settings');
+    if (saved) {
+      try {
+        return { ...DEFAULT_MEDIA_SETTINGS, ...JSON.parse(saved) };
+      } catch (e) {
+        return DEFAULT_MEDIA_SETTINGS;
+      }
+    }
+    return DEFAULT_MEDIA_SETTINGS;
+  });
+
+  const updateMediaSetting = (key: keyof AdvancedAudioSettings, value: any) => {
+    const updated = { ...mediaSettings, [key]: value };
+    setMediaSettings(updated);
+    localStorage.setItem('synora_media_settings', JSON.stringify(updated));
+  };
 
   useEffect(() => {
     if (user) {
@@ -146,6 +167,165 @@ export const SettingsPage = () => {
             <h3 className="text-xl font-bold text-white">Audio & Video Settings</h3>
           </div>
           <MediaTester />
+          
+          <div className="border-t border-slate-800/60 pt-8 mt-8 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
+              <h4 className="text-sm font-black text-slate-300 uppercase tracking-widest">Advanced Media Tuning</h4>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Audio Preferences */}
+              <div className="space-y-6">
+                <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Audio Processing Pipeline
+                </h5>
+                
+                {/* Mic Boost Slider */}
+                <div className="space-y-2 bg-slate-950/40 p-4 rounded-2xl border border-slate-800/50">
+                  <div className="flex justify-between text-xs font-bold mb-1">
+                    <span className="text-slate-400">Microphone Boost</span>
+                    <span className="text-emerald-400">{(mediaSettings.micBoost ?? 1.0).toFixed(1)}x</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="0.5" 
+                    max="2.5" 
+                    step="0.1"
+                    value={mediaSettings.micBoost ?? 1.0}
+                    onChange={(e) => updateMediaSetting('micBoost', parseFloat(e.target.value))}
+                    className="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                  <p className="text-[9px] text-slate-500 leading-none mt-1">Boosts low gain microphone devices mechanically</p>
+                </div>
+
+                {/* Input Volume Slider */}
+                <div className="space-y-2 bg-slate-950/40 p-4 rounded-2xl border border-slate-800/50">
+                  <div className="flex justify-between text-xs font-bold mb-1">
+                    <span className="text-slate-400">Input Capture Volume</span>
+                    <span className="text-blue-400">{Math.round((mediaSettings.inputVolume ?? 1.0) * 100)}%</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="0.0" 
+                    max="1.0" 
+                    step="0.05"
+                    value={mediaSettings.inputVolume ?? 1.0}
+                    onChange={(e) => updateMediaSetting('inputVolume', parseFloat(e.target.value))}
+                    className="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                  <p className="text-[9px] text-slate-500 leading-none mt-1">Adjusts target volume of Web Audio capture node</p>
+                </div>
+
+                {/* Toggles */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  {[
+                    { key: 'echoCancellation', label: 'Echo Cancel', desc: 'Prevent speaker feedback' },
+                    { key: 'noiseSuppression', label: 'Noise Suppress', desc: 'Filter room background noise' },
+                    { key: 'autoGainControl', label: 'Auto Gain', desc: 'Automatically level voice' },
+                    { key: 'voiceIsolation', label: 'Voice Isolation', desc: 'Isolate vocal frequencies' },
+                    { key: 'hdAudio', label: 'HD Audio (48kHz)', desc: 'Pristine high-fidelity sampling' },
+                    { key: 'stereoAudio', label: 'Stereo Audio', desc: 'Dual-channel microphone' },
+                    { key: 'originalSound', label: 'Original Sound', desc: 'Pass raw, unfiltered audio' },
+                    { key: 'musicMode', label: 'Music Mode', desc: 'High bandwidth full-band audio' },
+                    { key: 'lowLatency', label: 'Low Latency', desc: 'Interactive audio buffers' },
+                    { key: 'audioEnhancement', label: 'Enhance Audio', desc: 'Dynamic frequency tuning' },
+                  ].map((item) => (
+                    <button
+                      type="button"
+                      key={item.key}
+                      onClick={() => updateMediaSetting(item.key as any, !mediaSettings[item.key as keyof AdvancedAudioSettings])}
+                      className={cn(
+                        "p-3.5 rounded-2xl border text-left transition-all hover:scale-[1.01] active:scale-95 flex flex-col justify-between gap-1",
+                        mediaSettings[item.key as keyof AdvancedAudioSettings]
+                          ? "bg-blue-600/10 border-blue-500/40 text-blue-400"
+                          : "bg-slate-950/40 border-slate-800/60 text-slate-500 hover:bg-slate-800/30"
+                      )}
+                    >
+                      <span className="text-[10px] font-black uppercase tracking-wider block">{item.label}</span>
+                      <span className="text-[8px] opacity-65 leading-tight block">{item.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Video & Stream Settings */}
+              <div className="space-y-6">
+                <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Video & Stream Quality
+                </h5>
+
+                {/* Resolution */}
+                <div className="space-y-2 bg-slate-950/40 p-4 rounded-2xl border border-slate-800/50">
+                  <label className="text-xs text-slate-400 block font-bold mb-1">Target Video Resolution</label>
+                  <select 
+                    value={mediaSettings.resolution ?? '720p'}
+                    onChange={(e) => updateMediaSetting('resolution', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium cursor-pointer"
+                  >
+                    <option value="360p">360p (Standard definition / lowest bandwidth)</option>
+                    <option value="720p">720p (High definition / recommended standard)</option>
+                    <option value="1080p">1080p (Full High definition / high bandwidth)</option>
+                  </select>
+                </div>
+
+                {/* Frame Rate */}
+                <div className="space-y-2 bg-slate-950/40 p-4 rounded-2xl border border-slate-800/50">
+                  <label className="text-xs text-slate-400 block font-bold mb-1">Frame Rate Limit</label>
+                  <select 
+                    value={mediaSettings.frameRate ?? 30}
+                    onChange={(e) => updateMediaSetting('frameRate', parseInt(e.target.value))}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium cursor-pointer"
+                  >
+                    <option value="15">15 FPS (Slideshow quality / low bandwidth)</option>
+                    <option value="30">30 FPS (Standard standard motion video)</option>
+                    <option value="60">60 FPS (Ultra-smooth / high bandwidth)</option>
+                  </select>
+                </div>
+
+                {/* Bitrate slider */}
+                <div className="space-y-2 bg-slate-950/40 p-4 rounded-2xl border border-slate-800/50">
+                  <div className="flex justify-between text-xs font-bold mb-1">
+                    <span className="text-slate-400">Max WebRTC Video Bitrate</span>
+                    <span className="text-indigo-400">{mediaSettings.bitrate ?? 2000} kbps</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="500" 
+                    max="4000" 
+                    step="100"
+                    value={mediaSettings.bitrate ?? 2000}
+                    onChange={(e) => updateMediaSetting('bitrate', parseInt(e.target.value))}
+                    className="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                  <p className="text-[9px] text-slate-500 leading-none mt-1">Caps dynamic WebRTC video streaming bandwidth</p>
+                </div>
+
+                {/* Toggles */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  {[
+                    { key: 'mirrorCamera', label: 'Mirror Camera', desc: 'Mirror local webcam visual preview' },
+                    { key: 'backgroundBlur', label: 'Background Blur', desc: 'Enable dynamic visual background blurring' }
+                  ].map((item) => (
+                    <button
+                      type="button"
+                      key={item.key}
+                      onClick={() => updateMediaSetting(item.key as any, !mediaSettings[item.key as keyof AdvancedAudioSettings])}
+                      className={cn(
+                        "p-3.5 rounded-2xl border text-left transition-all hover:scale-[1.01] active:scale-95 flex flex-col justify-between gap-1",
+                        mediaSettings[item.key as keyof AdvancedAudioSettings]
+                          ? "bg-blue-600/10 border-blue-500/40 text-blue-400"
+                          : "bg-slate-950/40 border-slate-800/60 text-slate-500 hover:bg-slate-800/30"
+                      )}
+                    >
+                      <span className="text-[10px] font-black uppercase tracking-wider block">{item.label}</span>
+                      <span className="text-[8px] opacity-65 leading-tight block">{item.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Profile Section */}
@@ -448,214 +628,4 @@ export const SettingsPage = () => {
   );
 };
 
-export const MediaTester = () => {
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedMic, setSelectedMic] = useState('');
-  const [selectedSpeaker, setSelectedSpeaker] = useState('');
-  const [selectedCamera, setSelectedCamera] = useState('');
-  const [audioLevel, setAudioLevel] = useState(0);
-  const streamRef = useRef<MediaStream | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    const getDevices = async () => {
-      try {
-        // Small pause to let browser update permission state
-        await new Promise(r => setTimeout(r, 100));
-        let dev = await navigator.mediaDevices.enumerateDevices();
-        const hasLabels = dev.some(d => !!d.label);
-
-        if (!hasLabels) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-            stream.getTracks().forEach(t => t.stop());
-            dev = await navigator.mediaDevices.enumerateDevices();
-          } catch (e) {
-            console.warn("Permission denied for hardware listing", e);
-          }
-        }
-
-        setDevices(dev);
-        // Auto-select if nothing selected yet
-        if (dev.length > 0) {
-          const mic = dev.find(d => d.kind === 'audioinput' && d.deviceId !== 'default');
-          const spk = dev.find(d => d.kind === 'audiooutput' && d.deviceId !== 'default');
-          const cam = dev.find(d => d.kind === 'videoinput' && d.deviceId !== 'default');
-          if (mic && !selectedMic) setSelectedMic(mic.deviceId);
-          if (spk && !selectedSpeaker) setSelectedSpeaker(spk.deviceId);
-          if (cam && !selectedCamera) setSelectedCamera(cam.deviceId);
-        }
-      } catch (err) {
-        console.error("Failed to get devices", err);
-      }
-    };
-
-    getDevices();
-    
-    // Listen for device changes
-    navigator.mediaDevices.ondevicechange = getDevices;
-
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach((t: any) => t.stop());
-      navigator.mediaDevices.ondevicechange = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const startMedia = async () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-      }
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: { deviceId: selectedMic ? { exact: selectedMic } : undefined },
-          video: { deviceId: selectedCamera ? { exact: selectedCamera } : undefined }
-        });
-        streamRef.current = stream;
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        analyserRef.current = analyser;
-
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-
-        const updateLevel = () => {
-          if (!analyserRef.current) return;
-          analyserRef.current.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            sum += dataArray[i];
-          }
-          const average = sum / bufferLength;
-          setAudioLevel(average);
-          animationRef.current = requestAnimationFrame(updateLevel);
-        };
-        updateLevel();
-      } catch (err) {
-        console.error("Media access denied", err);
-      }
-    };
-    
-    if (selectedMic || selectedCamera) {
-      startMedia();
-    }
-  }, [selectedMic, selectedCamera]);
-
-  const mics = devices.filter(d => d.kind === 'audioinput');
-  const speakers = devices.filter(d => d.kind === 'audiooutput');
-  const cameras = devices.filter(d => d.kind === 'videoinput');
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="space-y-6">
-        <div className="space-y-4">
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Microphone</label>
-          <div className="relative group">
-            <select 
-              value={selectedMic} 
-              onChange={(e) => setSelectedMic(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-3 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium pr-10"
-            >
-              {mics.map(m => (
-                <option key={m.deviceId} value={m.deviceId}>{m.label || `Microphone ${m.deviceId.slice(0, 4)}`}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-hover:text-blue-500 pointer-events-none transition-colors" />
-          </div>
-          
-          <div className="pt-2">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Input Level</span>
-              <Mic className={cn("w-3.5 h-3.5", audioLevel > 10 ? "text-blue-500 animate-pulse" : "text-slate-600")} />
-            </div>
-            <div className="h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50 p-0.5">
-              <div 
-                className={cn(
-                  "h-full rounded-full transition-all duration-75",
-                  audioLevel > 50 ? "bg-orange-500" : "bg-blue-600"
-                )}
-                style={{ width: `${Math.min(100, (audioLevel / 128) * 100)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Speaker</label>
-          <div className="relative group">
-            <select 
-              value={selectedSpeaker} 
-              onChange={(e) => setSelectedSpeaker(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-3 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium pr-10"
-            >
-              {speakers.map(s => (
-                <option key={s.deviceId} value={s.deviceId}>{s.label || `Speaker ${s.deviceId.slice(0, 4)}`}</option>
-              ))}
-              {speakers.length === 0 && <option value="">System Default</option>}
-            </select>
-            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-hover:text-blue-500 pointer-events-none transition-colors" />
-          </div>
-          <button 
-            onClick={() => {
-              const audio = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3');
-              audio.volume = 1.0;
-              if ((audio as any).setSinkId && selectedSpeaker) {
-                (audio as any).setSinkId(selectedSpeaker).catch((err: any) => console.error("setSinkId error", err));
-              }
-              audio.play().catch(err => {
-                console.error("Audio playback error", err);
-                toast.error("Click anywhere on page first to enable sound");
-              });
-              toast.success("Playing test sound...");
-            }}
-            className="flex items-center gap-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all active:scale-95 group border border-slate-700/50"
-          >
-            <Volume2 className="w-4 h-4 group-hover:text-blue-500" />
-            Test Speakers
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Camera</label>
-          <div className="relative group">
-            <select 
-              value={selectedCamera} 
-              onChange={(e) => setSelectedCamera(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-3 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium pr-10"
-            >
-              {cameras.map(c => (
-                <option key={c.deviceId} value={c.deviceId}>{c.label || `Camera ${c.deviceId.slice(0, 4)}`}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-hover:text-blue-500 pointer-events-none transition-colors" />
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Video Preview</label>
-        <div className="aspect-video bg-slate-950 rounded-3xl border border-slate-800 overflow-hidden relative group">
-          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-          <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-xl border border-white/10">
-            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Live Preview</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
