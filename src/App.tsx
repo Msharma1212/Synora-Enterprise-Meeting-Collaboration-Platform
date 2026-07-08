@@ -10,7 +10,6 @@ import { HistoryPage } from './pages/History';
 import { SettingsPage } from './pages/Settings';
 import { MeetingRoom } from './pages/MeetingRoom';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { CommunityPage } from './pages/CommunityPage';
 import { Toaster, toast } from 'react-hot-toast';
 import api from './services/api';
 
@@ -96,7 +95,6 @@ export default function App() {
                 </AdminRoute>
               } 
             />
-            <Route path="/community/:username" element={<CommunityPage />} />
             <Route path="/" element={<Navigate to="/dashboard" />} />
           </Routes>
         </Router>
