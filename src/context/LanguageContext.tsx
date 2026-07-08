@@ -17,7 +17,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   
   // Try to load initial language from localStorage, then user profile, defaulting to 'English (US)'
   const [language, setLanguageState] = useState<string>(() => {
-    const saved = localStorage.getItem('zmeet_language');
+    const saved = localStorage.getItem('synora_language');
     if (saved) return saved;
     return 'English (US)';
   });
@@ -26,13 +26,13 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     if (user?.settings?.language) {
       setLanguageState(user.settings.language);
-      localStorage.setItem('zmeet_language', user.settings.language);
+      localStorage.setItem('synora_language', user.settings.language);
     }
   }, [user]);
 
   const setLanguage = async (newLang: string) => {
     setLanguageState(newLang);
-    localStorage.setItem('zmeet_language', newLang);
+    localStorage.setItem('synora_language', newLang);
     
     if (user) {
       try {
