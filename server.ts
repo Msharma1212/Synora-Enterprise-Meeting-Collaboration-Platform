@@ -439,16 +439,7 @@ async function startServer() {
     });
 
     socket.on("raise-hand", (payload) => {
-      if (payload.roomID && users[payload.roomID]) {
-        const targetObj = users[payload.roomID].find((u: any) => u.userId === payload.userID || u.socketId === payload.socketId || u.socketId === socket.id);
-        if (targetObj) {
-          targetObj.handRaised = payload.raised;
-        }
-      }
-      io.to(payload.roomID).emit("user-raised-hand", payload);
-      if (payload.roomID && users[payload.roomID]) {
-        io.to(payload.roomID).emit("participants-update", users[payload.roomID]);
-      }
+      handleHandRaiseState(payload.roomID, !!payload.raised, payload.userID || payload.userId, payload.name);
     });
 
     socket.on("emit-reaction", (payload) => {
@@ -515,24 +506,24 @@ async function startServer() {
         const targetSocketId = targetObj.socketId;
 
         if (action === 'mute') {
+          if (targetObj.isMuted) return; // Ignore if already muted
           targetObj.isMuted = true;
           targetObj.micLocked = true;
           io.to(targetSocketId).emit("force-mute", { roomID });
-          io.to(targetSocketId).emit("force-mute-user", { roomID });
         } else if (action === 'unmute') {
+          if (!targetObj.isMuted) return; // Ignore if already unmuted
           targetObj.isMuted = false;
           targetObj.micLocked = false;
           io.to(targetSocketId).emit("force-unmute", { roomID });
-          io.to(targetSocketId).emit("force-unmute-user", { roomID });
         } else if (action === 'camera-off') {
+          if (!targetObj.cameraEnabled) return; // Ignore if already off
           targetObj.cameraEnabled = false;
           targetObj.cameraLocked = true;
-          io.to(targetSocketId).emit("force-disable-camera", { roomID });
           io.to(targetSocketId).emit("force-camera-off", { roomID });
         } else if (action === 'camera-on') {
+          if (targetObj.cameraEnabled) return; // Ignore if already on
           targetObj.cameraEnabled = true;
           targetObj.cameraLocked = false;
-          io.to(targetSocketId).emit("force-enable-camera", { roomID });
           io.to(targetSocketId).emit("force-camera-on", { roomID });
         }
 
@@ -545,9 +536,9 @@ async function startServer() {
         } else if (action === 'unmute') {
           io.to(fallbackSocketId).emit("force-unmute", { roomID });
         } else if (action === 'camera-off') {
-          io.to(fallbackSocketId).emit("force-disable-camera", { roomID });
+          io.to(fallbackSocketId).emit("force-camera-off", { roomID });
         } else if (action === 'camera-on') {
-          io.to(fallbackSocketId).emit("force-enable-camera", { roomID });
+          io.to(fallbackSocketId).emit("force-camera-on", { roomID });
         }
       }
     };
@@ -579,33 +570,38 @@ async function startServer() {
       }
     });
 
-    socket.on("hand-raised", (payload) => {
-      const { roomID, userId, name } = payload;
-      if (roomID && users[roomID]) {
-        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
-        if (targetObj) {
-          targetObj.handRaised = true;
-        }
-        io.to(roomID).emit("user-raised-hand", { 
-          roomID, 
-          raised: true, 
-          userID: userId || targetObj?.userId, 
-          socketId: socket.id, 
-          name: name || targetObj?.name 
-        });
-        io.to(roomID).emit("participants-update", users[roomID]);
+    function handleHandRaiseState(roomID: string, raised: boolean, userId: string, name?: string) {
+      if (!roomID || !users[roomID]) return;
+
+      const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
+      if (!targetObj) return;
+
+      // Only proceed if there is an actual change in hand-raise state
+      if (!!targetObj.handRaised === !!raised) {
+        return;
       }
+
+      targetObj.handRaised = raised;
+
+      // Emit exactly once to the room
+      io.to(roomID).emit("user-raised-hand", {
+        roomID,
+        raised,
+        userID: targetObj.userId,
+        socketId: targetObj.socketId,
+        name: name || targetObj.name || "A participant"
+      });
+
+      // Update participants list
+      io.to(roomID).emit("participants-update", users[roomID]);
+    }
+
+    socket.on("hand-raised", (payload) => {
+      handleHandRaiseState(payload.roomID, true, payload.userId, payload.name);
     });
 
     socket.on("hand-lowered", (payload) => {
-      const { roomID, userId } = payload;
-      if (roomID && users[roomID]) {
-        const targetObj = users[roomID].find((u: any) => u.userId === userId || u.socketId === socket.id);
-        if (targetObj) {
-          targetObj.handRaised = false;
-        }
-        io.to(roomID).emit("participants-update", users[roomID]);
-      }
+      handleHandRaiseState(payload.roomID, false, payload.userId);
     });
 
     socket.on("user-muted", (payload) => {
