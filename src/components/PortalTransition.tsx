@@ -53,7 +53,7 @@ export const PortalTransition: React.FC<PortalTransitionProps> = ({
   // Sound configuration persisting to local storage. 
   const [soundEnabled, setSoundEnabled] = useState(() => {
     try {
-      return localStorage.getItem('zmeet_cinematic_audio') !== 'false';
+      return localStorage.getItem('synora_cinematic_audio') !== 'false';
     } catch {
       return true;
     }
@@ -86,9 +86,9 @@ export const PortalTransition: React.FC<PortalTransitionProps> = ({
   // Read previous travels to customize speeds and timing options
   const isRepeatExplorer = useMemo(() => {
     try {
-      const recorded = localStorage.getItem('zmeet_has_traveled_before');
+      const recorded = localStorage.getItem('synora_has_traveled_before');
       if (recorded === 'true') return true;
-      localStorage.setItem('zmeet_has_traveled_before', 'true');
+      localStorage.setItem('synora_has_traveled_before', 'true');
       return false;
     } catch {
       return false;
@@ -129,7 +129,7 @@ export const PortalTransition: React.FC<PortalTransitionProps> = ({
     const newVal = !soundEnabled;
     setSoundEnabled(newVal);
     try {
-      localStorage.setItem('zmeet_cinematic_audio', String(newVal));
+      localStorage.setItem('synora_cinematic_audio', String(newVal));
     } catch {}
     if (!newVal && audioContextRef.current) {
       try {
@@ -1315,10 +1315,10 @@ export const PortalTransition: React.FC<PortalTransitionProps> = ({
       <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-20 pointer-events-auto">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-sm font-black text-white shadow-xl">
-            ZM
+            SY
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Z-MEET TRANSIT PIPELINE</span>
+            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">SYNORA TRANSIT PIPELINE</span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="text-[9px] font-mono font-bold text-emerald-400 uppercase">THEME: {selectedAnimation}</span>
