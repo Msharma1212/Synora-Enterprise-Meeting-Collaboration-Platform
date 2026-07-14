@@ -160,6 +160,7 @@ async function startServer() {
   const socketUserData: any = {}; // socketID -> userData
   const userSockets: any = {}; // userId -> Array of socketIds
   const roomScreenSharers: any = {}; // roomID -> Array of representative userIds
+  const pendingDisconnects: { [userId: string]: { timeout: NodeJS.Timeout, socketId: string, roomID: string, userData: any } } = {};
 
   app.set('userSockets', userSockets);
   app.set('getActiveMeetingsData', () => users);
@@ -253,6 +254,23 @@ async function startServer() {
       
       socketToRoom[socket.id] = roomID;
       socket.join(roomID);
+
+      // Reconnection Handler: Cancel pending disconnect grace timeout if it exists
+      if (userId && pendingDisconnects[userId]) {
+        clearTimeout(pendingDisconnects[userId].timeout);
+        const oldSocketId = pendingDisconnects[userId].socketId;
+        // Notify others to destroy peer connection of old socket
+        socket.to(roomID).emit("user-left", oldSocketId);
+        delete pendingDisconnects[userId];
+      }
+
+      // Also search users list for any stale entries of the same user with a different socket
+      if (roomID && userId && users[roomID]) {
+        const existingEntry = users[roomID].find((u: any) => u.userId === userId);
+        if (existingEntry && existingEntry.socketId !== socket.id) {
+          socket.to(roomID).emit("user-left", existingEntry.socketId);
+        }
+      }
 
       let isHost = false;
       let meetingData: any = null;
@@ -793,8 +811,6 @@ async function startServer() {
     socket.on("disconnect", () => {
       console.log("User Disconnected:", socket.id);
       const roomID = socketToRoom[socket.id];
-      
-      // Track duration and register left event list log
       const userData = socketUserData[socket.id];
 
       // Clean up screenshare if disconnecting user was sharing
@@ -806,35 +822,73 @@ async function startServer() {
         }
       }
 
-      if (userData) {
-        const durationSeconds = Math.round((Date.now() - userData.joinedAt.getTime()) / 1000);
-        try {
-          AnalyticsLog.create({
-            event: "meeting_left",
-            userId: (userData.userId && mongoose.Types.ObjectId.isValid(userData.userId)) ? new mongoose.Types.ObjectId(userData.userId) : undefined,
-            meetingCode: roomID,
-            duration: durationSeconds
-          }).catch(err => console.error("Logged meeting_left fail:", err));
-        } catch (err) {}
-        delete socketUserData[socket.id];
-      }
+      if (userData && userData.userId && roomID) {
+        const userId = userData.userId;
 
-      if (users[roomID]) {
-        users[roomID] = users[roomID].filter((u: any) => u.socketId !== socket.id);
-        io.to(roomID).emit("participants-update", users[roomID]);
-        if (users[roomID].length === 0) {
-          Meeting.findOneAndUpdate({ code: roomID }, { isLive: false }).exec().catch(err => {
-            console.error("Error setting isLive: false for ended meeting:", err);
-          });
+        if (pendingDisconnects[userId]) {
+          clearTimeout(pendingDisconnects[userId].timeout);
+        }
+
+        // 10 seconds grace period to allow seamless reconnect/refresh
+        const graceTimeout = setTimeout(async () => {
+          console.log(`Grace period expired for user ${userId} in room ${roomID}`);
+          delete pendingDisconnects[userId];
+
+          const durationSeconds = Math.round((Date.now() - userData.joinedAt.getTime()) / 1000);
+          try {
+            await AnalyticsLog.create({
+              event: "meeting_left",
+              userId: (userId && mongoose.Types.ObjectId.isValid(userId)) ? new mongoose.Types.ObjectId(userId) : undefined,
+              meetingCode: roomID,
+              duration: durationSeconds
+            });
+          } catch (err) {
+            console.error("Logged meeting_left fail:", err);
+          }
+
+          if (users[roomID]) {
+            users[roomID] = users[roomID].filter((u: any) => u.userId !== userId);
+            io.to(roomID).emit("participants-update", users[roomID]);
+            if (users[roomID].length === 0) {
+              try {
+                await Meeting.findOneAndUpdate({ code: roomID }, { isLive: false });
+              } catch (err) {
+                console.error("Error setting isLive: false for ended meeting:", err);
+              }
+            }
+          }
+
+          if (waitingUsers[roomID]) {
+            waitingUsers[roomID] = waitingUsers[roomID].filter((u: any) => u.userId !== userId);
+            io.to(roomID).emit("waiting-list-update", waitingUsers[roomID]);
+          }
+
+          io.to(roomID).emit("user-left", socket.id);
+          io.to("admin-console").emit("admin-stats-update", getActiveStats());
+        }, 10000); // 10-second grace period
+
+        pendingDisconnects[userId] = {
+          timeout: graceTimeout,
+          socketId: socket.id,
+          roomID,
+          userData
+        };
+      } else {
+        // If user never fully registered/joined, run instant cleanup
+        if (roomID) {
+          if (users[roomID]) {
+            users[roomID] = users[roomID].filter((u: any) => u.socketId !== socket.id);
+            io.to(roomID).emit("participants-update", users[roomID]);
+          }
+          if (waitingUsers[roomID]) {
+            waitingUsers[roomID] = waitingUsers[roomID].filter((u: any) => u.socketId !== socket.id);
+            io.to(roomID).emit("waiting-list-update", waitingUsers[roomID]);
+          }
+          io.to(roomID).emit("user-left", socket.id);
         }
       }
-      
-      if (waitingUsers[roomID]) {
-        waitingUsers[roomID] = waitingUsers[roomID].filter((u: any) => u.socketId !== socket.id);
-        io.to(roomID).emit("waiting-list-update", waitingUsers[roomID]);
-      }
 
-      socket.broadcast.emit("user-left", socket.id);
+      delete socketUserData[socket.id];
       delete socketToRoom[socket.id];
 
       // Clean up userSockets map
