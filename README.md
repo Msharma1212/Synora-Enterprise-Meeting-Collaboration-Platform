@@ -1,163 +1,117 @@
-<div align="center">
+# Synora - Enterprise Meeting & Collaboration Platform
 
-# 🚀 Synora
-### Modern Real-Time Video Conferencing Platform
+Synora is a modern enterprise-grade real-time collaboration platform that enables secure meetings, live communication, audience engagement, scheduling, multilingual support, analytics, and seamless team workspace collaboration.
 
-Multi-user video meetings with role-based access control, screen sharing, live chat, audience management, and multilingual support.
-
-</div>
+Designed with premium typography, deep space layouts, and smooth transition animations, Synora offers a polished user experience tailored for high-performance and distributed professional teams.
 
 ---
 
-# ✨ Features
+## 🚀 Key Features
 
-- 🎥 HD Video Conferencing
-- 🎙️ Audio Controls (Mute / Unmute)
-- 📺 Screen Sharing
-- 💬 Real-Time Chat
-- ✋ Raise Hand Feature
-- 👥 Role-Based System
-  - Developer
-  - Host
-  - Admin
-  - Audience
-- 🔔 Notification System
-- 🌐 Multi-Language Support
-- 📱 Responsive UI
-- 📊 Meeting History
-- 👤 Audience Management
-- 🔗 Referral & Community System
-- 🔒 Secure Authentication
-- ⚡ Real-Time Socket Communication
+- **🔒 Enterprise Security & Auth**: Full JSON Web Token (JWT) based credential storage, secure password hashing, and user authentication.
+- **📹 HD Video Conferencing**: Low-latency peer-to-peer real-time streaming, high-fidelity audio/video pipelines, and robust media tester suites.
+- **🌍 Advanced Multilingual Support**: Dynamic, instant locale toggles across English, Bengali, Hindi, Spanish, French, and Arabic.
+- **🤖 Server-Side Gemini AI**: Intelligent real-time meeting transcripts analysis and smart summaries.
+- **📊 Analytics Dashboard**: Comprehensive metrics trackers for host statistics, upcoming and past meetings, top referrers, and live workspace status.
+- **💬 Team Collaboration Workspace**: Centralized team chats, instant sharing links, custom invitation workflows, and referral mechanisms.
 
 ---
 
-# 🛠 Tech Stack
+## 🛠️ Architecture
 
-### Frontend
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
+Synora is built using a modern, scalable full-stack architecture:
 
-### Backend
-- Node.js
-- Express.js
-- Socket.IO
+- **Frontend**:
+  - React 19 / TypeScript 5 with fast, optimized builds.
+  - Vite for development and bundling.
+  - Tailwind CSS for sleek utility-first responsive styling.
+  - Motion (`motion/react`) for smooth animations and transitions.
+  - Lucide React for consistent, crisp visual iconography.
 
-### Database
-- MongoDB
-
-### Authentication
-- JWT
-
-### Real-Time Communication
-- WebRTC
-- Socket.IO
+- **Backend**:
+  - Node.js & Express API proxy layer running on port `3000`.
+  - Full TypeScript compilation via `tsx` and `esbuild` for enterprise compatibility.
+  - Real-time communication powered by low-latency Socket.IO endpoints.
 
 ---
 
-# 📂 Project Structure
+## 📦 Installation & Setup
 
-```
-frontend/
-backend/
-src/
-components/
-pages/
-routes/
-controllers/
-models/
-services/
-```
+### Prerequisites
 
----
+- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- NPM (packaged with Node.js)
 
-# ⚙️ Installation
+### Step 1: Install Dependencies
 
-### Clone Repository
-
-```bash
-git clone https://github.com/Msharma1212/z-meet.git
-cd z-meet
-```
-
-### Install Dependencies
+To set up the workspace and install all pre-requisites:
 
 ```bash
 npm install
 ```
 
-### Configure Environment Variables
+### Step 2: Configure Environment Variables
 
-Create:
-
-```env
-.env
-```
-
-Example:
+Create a `.env` file in the root directory and specify your secret API credentials:
 
 ```env
-PORT=5000
-MONGO_URI=your_mongodb_url
-JWT_SECRET=your_secret
-GEMINI_API_KEY=your_api_key
+# Server Ingress Port (Default: 3000)
+PORT=3000
+
+# Secret Key for JWT Signing
+JWT_SECRET=your_jwt_signing_secret_here
+
+# AI Assistance Services (Server-Side)
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
+### Step 3: Run the Development Server
 
-
-# ▶️ Run Development Server
+To boot up the application in development mode with HMR and express-vite middlewares:
 
 ```bash
 npm run dev
 ```
 
----
-
-# 🚀 Production Build
-
-```bash
-npm run build
-```
+The application will be accessible at [http://localhost:3000](http://localhost:3000).
 
 ---
 
-# 📸 Key Modules
+## 🏗️ Production Deployment
 
-- Authentication
-- Dashboard
-- Meeting Room
-- Admin Panel
-- Audience System
-- Community Features
-- Notifications
-- History
+To package Synora for containerized or serverless production systems:
 
----
+1. **Build the assets**:
+   ```bash
+   npm run build
+   ```
+2. **Start the production server**:
+   ```bash
+   npm run start
+   ```
 
-# 🔮 Upcoming Features
-
-- PWA Support
-- Meeting Recording
-- AI Meeting Summary
-- Whiteboard
-- Polls & Reactions
-- Live Streaming
-- Push Notifications
+The application compiles into a single bundled CommonJS server file (`dist/server.cjs`) using `esbuild` to bypass ES Module import runtime checks and streamline deployment execution.
 
 ---
 
-# 👨‍💻 Author
+## 📸 Interface Overviews
 
-**Mayank Sharma**
-
-GitHub:
-https://github.com/Msharma1212
+- **Synora Home Dashboard**: Visually rich central workspace displaying ongoing sessions, host statistics, referrals list, and action toggles.
+- **Collaborative Meeting Rooms**: Integrated chat panel, real-time participant trackers, active audio-waveform indicators, and advanced media test facilities.
+- **Enterprise Authenticator**: Sleek cosmic-themed user access controls featuring responsive layout animations and instant translations.
 
 ---
 
-# ⭐ Z Meet
+## 🤝 Contribution Guidelines
 
-A scalable real-time communication platform designed for online communities, creators, and collaborative meetings.
+We welcome contributions to Synora! To suggest features, report issues, or propose changes:
 
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'Add amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request for review.
+
+---
+
+*Synora - Next-generation collaboration for global enterprises.*
