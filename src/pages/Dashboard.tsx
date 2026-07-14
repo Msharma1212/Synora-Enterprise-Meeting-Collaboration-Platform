@@ -106,6 +106,7 @@ export const Dashboard = () => {
     return hostCode ? `${window.location.origin}/register?ref=${hostCode}` : window.location.origin;
   };
 
+  
   // Invite Modal states
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
