@@ -49,6 +49,10 @@ export const MeetingRoomComponent = () => {
   const [micActive, setMicActive] = useState(true);
   const [videoActive, setVideoActive] = useState(true);
   const [isJoined, setIsJoined] = useState(false);
+  const isJoinedRef = useRef(false);
+  useEffect(() => {
+    isJoinedRef.current = isJoined;
+  }, [isJoined]);
   const [inWaitingRoom, setInWaitingRoom] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
@@ -857,11 +861,36 @@ export const MeetingRoomComponent = () => {
     socketRef.current = io();
     const socket = socketRef.current;
 
-    socket.on("connect", () => {
+    const onSocket = (event: string, handler: (...args: any[]) => void) => {
+      socket.off(event);
+      socket.on(event, handler);
+    };
+
+    onSocket("connect", () => {
       console.log("Socket connected:", socket.id);
+      if (isJoinedRef.current) {
+        console.log("Socket reconnected! Automatically rejoining...");
+        
+        // Destroy existing peer connections so we can start fresh
+        peersRef.current.forEach(p => {
+          if (p.peer) {
+            try { p.peer.destroy(); } catch (e) {}
+          }
+        });
+        peersRef.current = [];
+        setPeers([]);
+
+        socket.emit("join-room", {
+          roomID: code,
+          userId: user?._id || (user as any)?.id,
+          name: user?.name,
+          isMuted: !micActive,
+          cameraEnabled: videoActive
+        });
+      }
     });
 
-    socket.on("join-success", (data: any) => {
+    onSocket("join-success", (data: any) => {
       console.log("[MeetingRoom] join-success socket event received:", data);
       if (data && data.meetingRole) {
         setMeetingRole(data.meetingRole);
@@ -875,12 +904,12 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("global-settings-update", (settings: any) => {
+    onSocket("global-settings-update", (settings: any) => {
       console.log("Global settings updated dynamically from admin:", settings);
       setGlobalSettings(settings);
     });
 
-    socket.on("connect_error", (err: any) => {
+    onSocket("connect_error", (err: any) => {
       console.error("Socket connection error:", err);
       setError("Connection failed. Please check your internet.");
     });
@@ -961,7 +990,7 @@ export const MeetingRoomComponent = () => {
       console.error("Failed to load messages", err);
     });
 
-    socket.on("participants-update", (list: any[]) => {
+    onSocket("participants-update", (list: any[]) => {
       const seen = new Set();
       const unique: any[] = [];
       list.forEach((p) => {
@@ -982,11 +1011,11 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("waiting-list-update", (list: any[]) => {
+    onSocket("waiting-list-update", (list: any[]) => {
       setWaitingUsers(list);
     });
 
-    socket.on("admitted", () => {
+    onSocket("admitted", () => {
       playSystemSound('admit');
       setInWaitingRoom(false);
       setIsJoined(true);
@@ -1000,32 +1029,32 @@ export const MeetingRoomComponent = () => {
       });
     });
 
-    socket.on("rejected", () => {
+    onSocket("rejected", () => {
       toast.error("The host rejected your join request.");
       setInWaitingRoom(false);
       exitMeeting();
     });
 
-    socket.on("receive-message", (msg: any) => {
+    onSocket("receive-message", (msg: any) => {
       setMessages(prev => [...prev, { ...msg, _id: msg._id || Math.random().toString() }]);
       if (sidebarTab !== 'chat') {
         setUnreadChatCount(prev => prev + 1);
       }
     });
 
-    socket.on("message-updated", (updatedMsg: any) => {
+    onSocket("message-updated", (updatedMsg: any) => {
       setMessages(prev => prev.map(m => m._id === updatedMsg._id ? { ...m, text: updatedMsg.text } : m));
     });
 
-    socket.on("message-deleted", (messageId: string) => {
+    onSocket("message-deleted", (messageId: string) => {
       setMessages(prev => prev.filter(m => m._id !== messageId));
     });
 
-    socket.on("message-reacted", (updatedMsg: any) => {
+    onSocket("message-reacted", (updatedMsg: any) => {
       setMessages(prev => prev.map(m => m._id === updatedMsg._id ? { ...m, reactions: updatedMsg.reactions } : m));
     });
 
-    socket.on("user-raised-hand", (payload: any) => {
+    onSocket("user-raised-hand", (payload: any) => {
       const isMyHand = payload.userID === (user?._id || (user as any)?.id) || payload.socketId === socket.id;
       const userName = payload.name || "A participant";
       if (payload.raised) {
@@ -1062,7 +1091,7 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("receive-reaction", (payload: any) => {
+    onSocket("receive-reaction", (payload: any) => {
       const id = Math.random().toString(36).substring(7);
       setReactions(prev => [...prev, { ...payload, id }]);
       setTimeout(() => {
@@ -1070,7 +1099,7 @@ export const MeetingRoomComponent = () => {
       }, 4000);
     });
 
-    socket.on("poll-updated", (updatedPolls: any[]) => {
+    onSocket("poll-updated", (updatedPolls: any[]) => {
       setPolls(updatedPolls);
     });
 
@@ -1230,22 +1259,22 @@ export const MeetingRoomComponent = () => {
       toast.success("Your camera has been enabled by the host", { icon: "📷" });
     };
 
-    socket.on("force-mute", handleForceMute);
-    socket.on("force-unmute", handleForceUnmute);
-    socket.on("force-camera-off", handleForceCameraOff);
-    socket.on("force-camera-on", handleForceCameraOn);
+    onSocket("force-mute", handleForceMute);
+    onSocket("force-unmute", handleForceUnmute);
+    onSocket("force-camera-off", handleForceCameraOff);
+    onSocket("force-camera-on", handleForceCameraOn);
 
-    socket.on("force-remove", () => {
+    onSocket("force-remove", () => {
       toast.error("You have been removed from the meeting");
       exitMeeting();
     });
 
-    socket.on("force-exit", () => {
+    onSocket("force-exit", () => {
       toast.error("The meeting was deleted by the host");
       navigate("/dashboard");
     });
 
-    socket.on("screen-share-start", (payload: any) => {
+    onSocket("screen-share-start", (payload: any) => {
       console.log("[MeetingRoom] received screen-share-start", payload);
       if (payload && payload.screenSharers) {
         setScreenSharers(payload.screenSharers);
@@ -1277,7 +1306,7 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("screen-share-stop", (payload: any) => {
+    onSocket("screen-share-stop", (payload: any) => {
       console.log("[MeetingRoom] received screen-share-stop", payload);
       if (payload && payload.screenSharers) {
         setScreenSharers(payload.screenSharers);
@@ -1294,7 +1323,7 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("permissions-updated", (payload: any) => {
+    onSocket("permissions-updated", (payload: any) => {
       const isHost = (user?.role === 'admin') || user?.role === 'developer' || user?.role === 'co-admin' || user?._id === meetingDetails?.host || user?._id === (meetingDetails?.host as any)?._id || (user as any)?.id === meetingDetails?.host || (user as any)?.id === (meetingDetails?.host as any)?._id;
 
       if (payload.blockScreenShare !== undefined) {
@@ -1350,7 +1379,7 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("audience-request", (data: { requesterName: string, requesterId: string, targetUserId: string, roomID: string, hostSocketId: string }) => {
+    onSocket("audience-request", (data: { requesterName: string, requesterId: string, targetUserId: string, roomID: string, hostSocketId: string }) => {
       console.log("Received audience request from host:", data);
       const myId = user?._id || (user as any)?.id;
       if (data.targetUserId === myId) {
@@ -1363,7 +1392,7 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("audience-accepted", (data: { targetUserId: string, hostId: string }) => {
+    onSocket("audience-accepted", (data: { targetUserId: string, hostId: string }) => {
       console.log("Audience nomination accepted!", data);
       const myId = user?._id || (user as any)?.id;
       if (data.targetUserId === myId && user) {
@@ -1374,11 +1403,11 @@ export const MeetingRoomComponent = () => {
       }
     });
 
-    socket.on("audience-declined", (data: { targetUserName: string }) => {
+    onSocket("audience-declined", (data: { targetUserName: string }) => {
       toast.error(`${data.targetUserName} declined the Audience invitation.`, { icon: "❌" });
     });
 
-    socket.on("global-permissions-updated", (permissions: any) => {
+    onSocket("global-permissions-updated", (permissions: any) => {
       setGlobalPermissions(permissions);
       
       const isHost = (user?.role === 'admin') || user?.role === 'developer' || user?.role === 'co-admin' || user?._id === meetingDetails?.host || user?._id === (meetingDetails?.host as any)?._id || (user as any)?.id === meetingDetails?.host || (user as any)?.id === (meetingDetails?.host as any)?._id;
@@ -1485,7 +1514,7 @@ export const MeetingRoomComponent = () => {
           userVideo.current.srcObject = stream;
         }
 
-        socket.on("all-users", (users: string[]) => {
+        onSocket("all-users", (users: string[]) => {
           const peers: any[] = [];
           users.forEach(userID => {
             if (peersRef.current.some(p => p.peerID === userID)) return;
@@ -1510,7 +1539,7 @@ export const MeetingRoomComponent = () => {
           setPeers(peers);
         });
 
-        socket.on("user-joined", (payload: any) => {
+        onSocket("user-joined", (payload: any) => {
           if (!payload) return;
           const callerID = payload.callerID || (payload.user && (payload.user.userId || payload.user._id || payload.user.id));
           if (!callerID) return;
@@ -1564,12 +1593,12 @@ export const MeetingRoomComponent = () => {
           });
         });
 
-        socket.on("receiving-returned-signal", (payload: any) => {
+        onSocket("receiving-returned-signal", (payload: any) => {
           const item = peersRef.current.find(p => p.peerID === payload.id);
           if (item) item.peer.signal(payload.signal);
         });
 
-        socket.on("user-left", (id: string) => {
+        onSocket("user-left", (id: string) => {
           playSystemSound('leave');
           toast.error("Participant left", {
             icon: <LogOut className="w-5 h-5 text-red-500" />,
@@ -1577,7 +1606,11 @@ export const MeetingRoomComponent = () => {
             style: { background: '#151921', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }
           });
           const peerObj = peersRef.current.find(p => p.peerID === id);
-          if (peerObj) peerObj.peer.destroy();
+          if (peerObj) {
+            try {
+              peerObj.peer.destroy();
+            } catch (e) {}
+          }
           const remainPeers = peersRef.current.filter(p => p.peerID !== id);
           peersRef.current = remainPeers;
           setPeers(remainPeers);
@@ -3361,6 +3394,7 @@ const VideoTile = (props: any) => {
         <video 
           playsInline 
           autoPlay 
+          muted={props.isLocal || isScreenTile}
           ref={ref} 
           className={cn(
             "w-full h-full select-none origin-center transform-gpu", 
@@ -4776,3 +4810,4 @@ export const MeetingRoom = () => (
 );
 
 export default MeetingRoom;
+
