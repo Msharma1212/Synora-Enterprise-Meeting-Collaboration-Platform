@@ -24,3 +24,4 @@ router.get('/referral-info/:code', getReferralInfo);
 router.post('/xp/add', protect, addXP);
 
 export default router;
+
